@@ -74,6 +74,7 @@
 #include "burn_ym2610.h"
 #include "bitswap.h"
 #include "neocdlist.h"
+#include "burn_ost.h"
 
 // #undef USE_SPEEDHACKS
 static INT32 NEO_RASTER_IRQ_TWEAK = 0; // spinmast prefers offset of 3 here.
@@ -84,6 +85,13 @@ static INT32 NEO_RASTER_IRQ_TWEAK = 0; // spinmast prefers offset of 3 here.
 
 #define NEO_HREFRESH (15625.0)
 #define NEO_VREFRESH (NEO_HREFRESH / 264.0)
+
+// The watchdog is clocked from the same master clock as the 68K, so its timeout is a fixed
+// number of 68K cycles (~0.128s at 12MHz), independent of the CPU speed adjustment.
+// Games use it as a protection (busy loop expected to be interrupted by a watchdog reset,
+// flag written to SRAM 0xD00100 otherwise), a timeout scaled with the overclock defeats it.
+#define NEO_WATCHDOG_CYCLES ((INT32)(12000000.0 / NEO_VREFRESH) * 8)
+
 #define NEO_CDVREFRESH (6041957.0 / (264 * 384))
 
 // If defined, enable emulation of the watchdog timer (timing doesn't match real hardware 100%)
@@ -1498,6 +1506,8 @@ INT32 NeoScan(INT32 nAction, INT32* pnMin)
 		BurnYM2610Scan(nAction, pnMin);
 		ZetClose();
 
+		BurnOstScan(nAction, pnMin);
+
 		if (nNeoSystemType & NEO_SYS_MVS) {
 			uPD4990AScan(nAction, pnMin);
 		}
@@ -1888,13 +1898,8 @@ static inline void NeoCDIRQUpdate(UINT8 byteValue)
 	}
 }
 
-static inline void SendSoundCommand(const UINT8 nCommand)
+static inline void SendSoundCommandZ80(const UINT8 nCommand)
 {
-	if (ZetGetActive() == -1) return;
-//	bprintf(PRINT_NORMAL, _T("  - Sound command sent (0x%02X).\n"), nCommand);
-
-	neogeoSynchroniseZ80(0);
-
 	nSoundStatus &= ~1;
 	nSoundLatch = nCommand;
 
@@ -1902,6 +1907,34 @@ static inline void SendSoundCommand(const UINT8 nCommand)
 		ZetSetIRQLine(0x20, CPU_IRQSTATUS_ACK);
 		ZetSetIRQLine(0x20, CPU_IRQSTATUS_NONE);
 	}
+}
+
+// OST packs (burn/snd/burn_ost.cpp): "then=native" / "then=<code>", sent from BurnOstFrame()
+static void NeoOstSend(UINT32 nCode)
+{
+	if (ZetGetActive() == -1) return;
+
+	SendSoundCommandZ80(nCode & 0xff);
+}
+
+static inline void SendSoundCommand(UINT8 nCommand)
+{
+	if (ZetGetActive() == -1) return;
+//	bprintf(PRINT_NORMAL, _T("  - Sound command sent (0x%02X).\n"), nCommand);
+
+	neogeoSynchroniseZ80(0);
+
+	if (BurnOstActive()) {
+		INT32 nOst = BurnOstCommand(nCommand);
+		if (nOst == OST_DROP) {
+			// nothing for the Z80, but the 68k may wait for the command to be taken
+			nSoundStatus |= 1;
+			return;
+		}
+		nCommand = nOst & 0xff;
+	}
+
+	SendSoundCommandZ80(nCommand);
 
 	// notes: if sound timing changes, check these sensitive games:
 	// nam1975: voice dies after coin up
@@ -3938,6 +3971,8 @@ static INT32 neogeoReset()
 	BurnYM2610Reset();
 	ZetClose();
 
+	BurnOstReset();
+
 #if defined EMULATE_WATCHDOG
 	nNeoWatchdog = 0;
 #endif
@@ -4163,19 +4198,21 @@ static INT32 NeoInitCommon()
 	NEO_RASTER_IRQ_TWEAK = 0;
 
 	// These games rely on reading the line counter for synchronising raster effects
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "moshougi")) {
+	const static char * drv_name   = BurnDrvGetTextA(DRV_NAME);
+	const static char * drv_parent = BurnDrvGetTextA(DRV_PARENT);
+	if (!strcmp(drv_name, "moshougi")) {
 		bRenderLineByLine = true;
 	}
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "neodrift")) {
+	if (!strcmp(drv_name, "neodrift")) {
 		bRenderLineByLine = true;
 	}
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "zedblade")) {
+	if (!strcmp(drv_name, "zedblade")) {
 		bRenderLineByLine = true;
 	}
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "crswd2bl")) {
+	if (!strcmp(drv_name, "crswd2bl") || (drv_parent && !strcmp(drv_parent, "crswd2bl"))) {
 		bRenderLineByLine = true;
 	}
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "spinmast")) {
+	if (!strcmp(drv_name, "spinmast")) {
 		NEO_RASTER_IRQ_TWEAK = 3; // fix glitches along the bottom of screen in the water level.
 	}
 
@@ -4228,6 +4265,11 @@ static INT32 NeoInitCommon()
 	BurnYM2610SetRoute(BURN_SND_YM2610_AY8910_ROUTE, 0.20, BURN_SND_ROUTE_BOTH);
 
 	BurnTimerAttachZet(nZ80Clockspeed);
+
+	if (!IsNeoGeoCD()) {
+		// OST packs (support/ost/<set>.ost), every write to 0x320000 is a command
+		BurnOstInit(BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_PARENT), OST_MAILBOX, NeoOstSend);
+	}
 
 	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_MVS) {
 		for (nNeoActiveSlot = 0; nNeoActiveSlot < MAX_SLOT; nNeoActiveSlot++) {
@@ -4495,6 +4537,7 @@ INT32 NeoExit()
 
 	NeoExitPalette();
 
+	BurnOstExit();
 	BurnYM2610Exit();
 
 	ZetExit();									// Deallocate Z80
@@ -4838,12 +4881,6 @@ INT32 NeoFrame()
 		}
 	}
 
-	// note: Many neogeo games will be blocked on an anti-piracy screen or a black screen when the cpu is overclocked,
-	//       this is especially true for mslug games, one such case is mslug2 at both 0x200 and 0x400.
-	//       This seems directly related to SRAM writing, because getting the SRAM generated once at 0x100
-	//       and overclocking later works fine, meaning booting games with a forced overclock as it was done prior to
-	//       https://github.com/finalburnneo/FBNeo/commit/600088b8122d9977d3ae020dcd4101a3d5092a4d is not acceptable
-	//       (dozens of those mslug hacks wouldn't boot)
 	if (nPrevBurnCPUSpeedAdjust != nBurnCPUSpeedAdjust) {
 		bprintf(0, _T("\n---init cycles etc ---\n"));
 		// 68K CPU clock is 12MHz, modified by nBurnCPUSpeedAdjust
@@ -4880,7 +4917,7 @@ INT32 NeoFrame()
 #if defined EMULATE_WATCHDOG
 	// If the watchdog isn't reset every 8 frames, reset the system
 	// This can't be 100% accurate, as the 68000 instruction timings are not 100%
-	if ((nNeoSystemType & NEO_SYS_CART) && nNeoWatchdog > nCyclesTotal[0] * 8) {
+	if ((nNeoSystemType & NEO_SYS_CART) && nNeoWatchdog > NEO_WATCHDOG_CYCLES) {
 		if (bDisableNeoWatchdog == false) {
 #if 1 && defined FBNEO_DEBUG
 			SekOpen(0);
@@ -5175,8 +5212,10 @@ INT32 NeoFrame()
 
 	nCycles68KSync = SekTotalCycles();
 	BurnTimerEndFrame(nCyclesTotal[1]);
+	BurnOstFrame();
 	if (pBurnSoundOut) {
 		BurnYM2610Update(pBurnSoundOut, nBurnSoundLen);
+		BurnOstRender(pBurnSoundOut, nBurnSoundLen);
 	}
 
 	// Update the uPD4990 until the end of the frame

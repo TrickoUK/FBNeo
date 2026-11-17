@@ -1,6 +1,8 @@
 #ifndef MIPS3_INTF
 #define MIPS3_INTF
 
+#include <stdint.h>
+
 // MIPS III (R4600) interpreter, little-endian guest.
 // Addresses given to Mips3MapMemory/Mips3MapHandler and passed to handlers are physical.
 
@@ -28,6 +30,8 @@ void Mips3NewFrame();
 unsigned int Mips3GetPC();
 int Mips3Scan(int nAction);
 
+// MAP_FETCH sets the memory used for instruction fetches, so a page can have a data read handler
+// (e.g. adding wait states) while code is still fetched and cached from memory.
 int Mips3MapMemory(unsigned char* pMemory, unsigned int nStart, unsigned int nEnd, int nType);
 int Mips3MapHandler(uintptr_t nHandler, unsigned int nStart, unsigned int nEnd, int nType);
 
@@ -45,6 +49,9 @@ int Mips3SetWriteWordHandler(int i, pMips3WriteWordHandler pHandler);
 
 int Mips3SetReadDoubleHandler(int i, pMips3ReadDoubleHandler pHandler);
 int Mips3SetWriteDoubleHandler(int i, pMips3WriteDoubleHandler pHandler);
+
+// adds cycles to the running instruction, for wait states in memory handlers
+void Mips3BurnCycles(int cycles);
 
 // line 0-4 -> Cause.IP2-IP6 (IP7 is the internal Count/Compare timer)
 void Mips3SetIRQLine(const int line, const int state);

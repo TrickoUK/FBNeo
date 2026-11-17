@@ -27,6 +27,7 @@
 #ifndef SUPPORT_SPLIT_DRIVER
  #define BUILD_ASTROHOME
  #define BUILD_ATARI
+ #define BUILD_ATARI2600
  #define BUILD_CAPCOM
  #define BUILD_CAVE
  #define BUILD_CHANNELF
@@ -63,6 +64,7 @@ extern TCHAR szAppHDDPath[MAX_PATH];
 extern TCHAR szAppBlendPath[MAX_PATH];
 extern TCHAR szAppEEPROMPath[MAX_PATH];
 extern TCHAR szAppSnesMsu1Path[MAX_PATH];	// SNES MSU-1 media root
+extern TCHAR szAppOstPath[MAX_PATH];		// OST packs (burn_ost)
 
 // Macro to determine the size of a struct up to and including "member"
 #define STRUCT_SIZE_HELPER(type, member) offsetof(type, member) + sizeof(((type*)0)->member)
@@ -141,6 +143,11 @@ extern INT32 (__cdecl *BurnExtProgressUpdateCallback)(double dProgress, const TC
 // Application-defined catridge initialisation function
 extern INT32 (__cdecl *BurnExtCartridgeSetupCallback)(BurnCartrigeCommand nCommand);
 
+// Application-defined rumble (force feedback) function
+//  nPlayer: 0-based player number, or -1 for "all players" (used to stop everything)
+//  nStrong / nWeak: motor strength, 0 (off) .. 0xffff (full) - strong = low-frequency motor, weak = high-frequency motor
+extern INT32 (__cdecl *BurnExtRumbleCallback)(INT32 nPlayer, INT32 nStrong, INT32 nWeak);
+
 // Application-defined colour conversion function
 extern UINT32 (__cdecl *BurnHighCol) (INT32 r, INT32 g, INT32 b, INT32 i);
 
@@ -186,6 +193,7 @@ struct BurnSampleInfo {
 struct BurnHDDInfo {
 	char *szName;
 	char *szSha1;
+	UINT32 nFlags;	// BRF_OPT: optional disk
 };
 
 // ---------------------------------------------------------------------------
@@ -368,6 +376,8 @@ extern INT32 bRunAhead;				// "Run Ahead" lag-reduction technique UI option (on/
 
 extern INT32 bBurnRunAheadFrame;	// for drivers, hiscore, etc, to recognize that this is the "runahead frame"
 									// for instance, you wouldn't want to apply hi-score data on a "runahead frame"
+
+void BurnRumble(INT32 nPlayer, INT32 nStrong, INT32 nWeak); // Rumble / force feedback for drivers.
 
 extern INT32 nBurnSoundRate;		// Samplerate of sound
 extern INT32 nBurnSoundLen;			// Length in samples per frame
@@ -602,6 +612,7 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_PREFIX_IGS_PGM2						(0x23000000)
 #define HARDWARE_PREFIX_ASTROHOME                       (0x24000000)
 #define HARDWARE_PREFIX_GBA                             (0x25000000)
+#define HARDWARE_PREFIX_ATARI2600                       (0x26000000)
 
 #define HARDWARE_SNK_NGP								(HARDWARE_PREFIX_NGP | 0x00000000)
 #define HARDWARE_SNK_NGPC								(HARDWARE_PREFIX_NGP | 0x00000001) // must not be 0x10000
@@ -739,6 +750,8 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_SEGA_GAME_GEAR							(HARDWARE_PREFIX_SEGA_GAME_GEAR)
 
 #define HARDWARE_SEGA_MEGADRIVE							(HARDWARE_PREFIX_SEGA_MEGADRIVE)
+#define HARDWARE_SEGA_MEGACD							(HARDWARE_PREFIX_SEGA_MEGADRIVE | 0x00010000)
+#define HARDWARE_SEGA_32X								(HARDWARE_PREFIX_SEGA_MEGADRIVE | 0x00020000)
 
 #define HARDWARE_SEGA_SG1000                            (HARDWARE_PREFIX_SEGA_SG1000)
 #define HARDWARE_SEGA_SG1000_RAMEXP_A                   (0x1000)
@@ -856,6 +869,8 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_ASTROHOME                              (HARDWARE_PREFIX_ASTROHOME)
 
 #define HARDWARE_GBA                                    (HARDWARE_PREFIX_GBA)
+
+#define HARDWARE_ATARI2600                              (HARDWARE_PREFIX_ATARI2600)
 
 // flags for the genre member
 #define GBF_HORSHOOT									(1 << 0)

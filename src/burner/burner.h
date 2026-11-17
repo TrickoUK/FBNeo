@@ -20,7 +20,7 @@
 #if defined (BUILD_QT)
  #define DIRS_MAX (4)								// Maximum number of directories to search
 #else
- #define DIRS_MAX (21)								// Maximum number of directories to search
+ #define DIRS_MAX (23)								// Maximum number of directories to search
 #endif
 
 #include "title.h"
@@ -45,6 +45,8 @@ typedef struct tagIMAGE {
  #include "burner_macos.h"
 #elif defined (BUILD_SDL) || defined (BUILD_SDL2)
  #include "burner_sdl.h"
+#elif defined (BUILD_HEADLESS)
+ #include "burner_headless.h"
 #elif defined (_XBOX) && !defined(__LIBRETRO__)
  #include "burner_xbox.h"
 #elif defined(__LIBRETRO__)
@@ -233,6 +235,8 @@ void ComputeGammaLUT();
 #define DAT_CHANNELF_ONLY		16
 #define DAT_ASTROHOME_ONLY		17
 #define DAT_GBA_ONLY			18
+#define DAT_ATARI2600_ONLY		19
+#define DAT_32X_ONLY			20
 
 INT32 write_datfile(INT32 bType, FILE* fDat);
 INT32 create_datfile(TCHAR* szFilename, INT32 bType);

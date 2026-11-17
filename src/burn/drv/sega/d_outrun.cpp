@@ -13,15 +13,16 @@ static struct BurnInputInfo OutrunInputList[] = {
 	{"Coin 2"            , BIT_DIGITAL   , System16InputPort0 + 7, "p2 coin"    },
 
 	A("Steering"         , BIT_ANALOG_REL, &System16AnalogPort0,   "p1 x-axis"  ),
-	A("Accelerate"       , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
+	A("Accelerator"      , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
 	A("Brake"            , BIT_ANALOG_REL, &System16AnalogPort2,   "p1 fire 2"  ),
-	{"Gear"              , BIT_DIGITAL   , &System16Gear       ,   "p1 fire 3"  },
+	{"Gear Shift"        , BIT_DIGITAL   , &System16Gear       ,   "p1 fire 3"  },
 	
 	{"Service"           , BIT_DIGITAL   , System16InputPort0 + 2 , "service"   },
 	{"Diagnostics"       , BIT_DIGITAL   , System16InputPort0 + 1 , "diag"      },
 	{"Reset"             , BIT_DIGITAL   , &System16Reset         , "reset"     },
 	{"Dip 1"             , BIT_DIPSWITCH , System16Dip + 0        , "dip"       },
 	{"Dip 2"             , BIT_DIPSWITCH , System16Dip + 1        , "dip"       },
+	{"Dip 3"             , BIT_DIPSWITCH , System16Dip + 2        , "dip"       },
 };
 
 STDINPUTINFO(Outrun)
@@ -32,7 +33,7 @@ static struct BurnInputInfo ShangonInputList[] = {
 	{"Coin 2"            , BIT_DIGITAL   , System16InputPort0 + 1, "p2 coin"    },
 
 	A("Steering"         , BIT_ANALOG_REL, &System16AnalogPort0,   "p1 x-axis"  ),
-	A("Accelerate"       , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
+	A("Accelerator"      , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
 	A("Brake"            , BIT_ANALOG_REL, &System16AnalogPort2,   "p1 fire 2"  ),
 	{"Super Charger"     , BIT_DIGITAL   , System16InputPort0 + 5, "p1 fire 3"  },
 	
@@ -41,6 +42,7 @@ static struct BurnInputInfo ShangonInputList[] = {
 	{"Reset"             , BIT_DIGITAL   , &System16Reset         , "reset"     },
 	{"Dip 1"             , BIT_DIPSWITCH , System16Dip + 0        , "dip"       },
 	{"Dip 2"             , BIT_DIPSWITCH , System16Dip + 1        , "dip"       },
+	{"Dip 3"             , BIT_DIPSWITCH , System16Dip + 2        , "dip"       },
 };
 
 STDINPUTINFO(Shangon)
@@ -51,9 +53,9 @@ static struct BurnInputInfo ToutrunInputList[] = {
 	{"Coin 2"            , BIT_DIGITAL   , System16InputPort0 + 7, "p2 coin"    },
 
 	A("Steering"         , BIT_ANALOG_REL, &System16AnalogPort0,   "p1 x-axis"  ),
-	A("Accelerate"       , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
+	A("Accelerator"      , BIT_ANALOG_REL, &System16AnalogPort1,   "p1 fire 1"  ),
 	A("Brake"            , BIT_ANALOG_REL, &System16AnalogPort2,   "p1 fire 2"  ),
-	{"Gear"              , BIT_DIGITAL   , &System16Gear       ,   "p1 fire 3"  },
+	{"Gear Shift"        , BIT_DIGITAL   , &System16Gear       ,   "p1 fire 3"  },
 	{"Nitro"             , BIT_DIGITAL   , System16InputPort0 + 5, "p1 fire 4"  },
 	
 	{"Service"           , BIT_DIGITAL   , System16InputPort0 + 2 , "service"   },
@@ -61,6 +63,7 @@ static struct BurnInputInfo ToutrunInputList[] = {
 	{"Reset"             , BIT_DIGITAL   , &System16Reset         , "reset"     },
 	{"Dip 1"             , BIT_DIPSWITCH , System16Dip + 0        , "dip"       },
 	{"Dip 2"             , BIT_DIPSWITCH , System16Dip + 1        , "dip"       },
+	{"Dip 3"             , BIT_DIPSWITCH , System16Dip + 2        , "dip"       },
 };
 
 STDINPUTINFO(Toutrun)
@@ -108,11 +111,20 @@ Dip Defs
 	{dipval, 0x01, 0xf0, 0xa0, "1 Coin  6 Credits"                  },			\
 	{dipval, 0x01, 0xf0, 0x00, "Free Play (if coin A too) or 1C/1C" },
 	
+// Higher internal resolution (hi-res renderer in sys16_gfx.cpp), read by
+// OutrunSetResolution() when the game starts: bits 1-2 of DIP 3
+#define OUTRUN_RESOLUTION(dipval)								\
+	{0   , 0xfe, 0   , 3   , "Game Resolution"                    },			\
+	{dipval, 0x01, 0x06, 0x00, "Original (320x224)"                 },			\
+	{dipval, 0x01, 0x06, 0x02, "2x (640x448)"                       },			\
+	{dipval, 0x01, 0x06, 0x04, "4x (1280x896)"                      },
+
 static struct BurnDIPInfo OutrunDIPList[]=
 {
 	// Default Values
 	{0x0a, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0b, 0xff, 0xff, 0xf9, NULL                                 },
+	{0x0c, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0a)
@@ -138,6 +150,9 @@ static struct BurnDIPInfo OutrunDIPList[]=
 	{0x0b, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0b, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0b, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0c)
 };
 
 STDDIPINFO(Outrun)
@@ -147,6 +162,7 @@ static struct BurnDIPInfo OutrunehDIPList[]=
 	// Default Values
 	{0x0a, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0b, 0xff, 0xff, 0xf9, NULL                                 },
+	{0x0c, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0a)
@@ -176,6 +192,9 @@ static struct BurnDIPInfo OutrunehDIPList[]=
 	{0x0b, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0b, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0b, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0c)
 };
 
 STDDIPINFO(Outruneh)
@@ -185,6 +204,7 @@ static struct BurnDIPInfo OutrundxDIPList[]=
 	// Default Values
 	{0x0a, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0b, 0xff, 0xff, 0xfc, NULL                                 },
+	{0x0c, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0a)
@@ -209,6 +229,9 @@ static struct BurnDIPInfo OutrundxDIPList[]=
 	{0x0b, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0b, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0b, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0c)
 };
 
 STDDIPINFO(Outrundx)
@@ -218,6 +241,7 @@ static struct BurnDIPInfo OutrundxehDIPList[]=
 	// Default Values
 	{0x0a, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0b, 0xff, 0xff, 0xfc, NULL                                 },
+	{0x0c, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0a)
@@ -246,6 +270,9 @@ static struct BurnDIPInfo OutrundxehDIPList[]=
 	{0x0b, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0b, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0b, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0c)
 };
 
 STDDIPINFO(Outrundxeh)
@@ -255,6 +282,7 @@ static struct BurnDIPInfo ShangonDIPList[]=
 	// Default Values
 	{0x0a, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0b, 0xff, 0xff, 0x1e, NULL                                 },
+	{0x0c, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0a)
@@ -275,6 +303,9 @@ static struct BurnDIPInfo ShangonDIPList[]=
 	{0x0b, 0x01, 0x18, 0x18, "Normal"                             },
 	{0x0b, 0x01, 0x18, 0x08, "Hard"                               },
 	{0x0b, 0x01, 0x18, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0c)
 };
 
 STDDIPINFO(Shangon)
@@ -284,6 +315,7 @@ static struct BurnDIPInfo ToutrunDIPList[]=
 	// Default Values
 	{0x0b, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0c, 0xff, 0xff, 0xd9, NULL                                 },
+	{0x0d, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0b)
@@ -314,6 +346,9 @@ static struct BurnDIPInfo ToutrunDIPList[]=
 	{0x0c, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0c, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0c, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0d)
 };
 
 STDDIPINFO(Toutrun)
@@ -323,6 +358,7 @@ static struct BurnDIPInfo ToutruncDIPList[]=
 	// Default Values
 	{0x0b, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0c, 0xff, 0xff, 0xd8, NULL                                 },
+	{0x0d, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0b)
@@ -349,6 +385,9 @@ static struct BurnDIPInfo ToutruncDIPList[]=
 	{0x0c, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0c, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0c, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0d)
 };
 
 STDDIPINFO(Toutrunc)
@@ -358,6 +397,7 @@ static struct BurnDIPInfo ToutrunmDIPList[]=
 	// Default Values
 	{0x0b, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0c, 0xff, 0xff, 0xdb, NULL                                 },
+	{0x0d, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0b)
@@ -385,6 +425,9 @@ static struct BurnDIPInfo ToutrunmDIPList[]=
 	{0x0c, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0c, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0c, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0d)
 };
 
 STDDIPINFO(Toutrunm)
@@ -394,6 +437,7 @@ static struct BurnDIPInfo ToutrunctDIPList[]=
 	// Default Values
 	{0x0b, 0xff, 0xff, 0xff, NULL                                 },
 	{0x0c, 0xff, 0xff, 0xd8, NULL                                 },
+	{0x0d, 0xff, 0xff, 0x00, NULL                                 },
 
 	// Dip 1
 	OUTRUN_COINAGE(0x0b)
@@ -420,6 +464,9 @@ static struct BurnDIPInfo ToutrunctDIPList[]=
 	{0x0c, 0x01, 0xc0, 0xc0, "Normal"                             },
 	{0x0c, 0x01, 0xc0, 0x40, "Hard"                               },
 	{0x0c, 0x01, 0xc0, 0x00, "Hardest"                            },
+
+	// Dip 3
+	OUTRUN_RESOLUTION(0x0d)
 };
 
 STDDIPINFO(Toutrunct)
@@ -2246,7 +2293,7 @@ UINT8 OutrunProcessAnalogControls(UINT16 value)
 			return ProcessAnalog(System16AnalogPort0, 0, INPUT_DEADZONE, 0x20, 0xe0);
 		}
 
-		// Accelerate
+		// Accelerator
 		case 4: {
 			return ProcessAnalog(System16AnalogPort1, 0, INPUT_DEADZONE | INPUT_LINEAR | INPUT_MIGHTBEDIGITAL, 0x00, 0xff);
 		}
@@ -2269,7 +2316,7 @@ UINT8 ShangonProcessAnalogControls(UINT16 value)
 			return ProcessAnalog(System16AnalogPort0, 1, INPUT_DEADZONE, 0x20, 0xe0);
 		}
 
-		// Accelerate
+		// Accelerator
 		case 1: {
 			return ProcessAnalog(System16AnalogPort1, 0, INPUT_DEADZONE | INPUT_LINEAR | INPUT_MIGHTBEDIGITAL, 0x00, 0xff);
 		}
@@ -2283,8 +2330,26 @@ UINT8 ShangonProcessAnalogControls(UINT16 value)
 	return 0;
 }
 
+// Sets the hi-res scale and screen size from the "Game Resolution" DIP.
+// Called by every Out Run board game's Init before System16Init().
+static void OutrunSetResolution()
+{
+	switch ((System16Dip[2] & 0x06) >> 1) {
+		case 1:  System16ResScale = 2; break;
+		case 2:  System16ResScale = 4; break;
+		default: System16ResScale = 1; break;
+	}
+
+	if (System16ResScale > 1) {
+		// restored to 320x224 automatically by BurnDrvExit()
+		BurnDrvSetVisibleSize(320 * System16ResScale, 224 * System16ResScale);
+	}
+}
+
 static INT32 OutrunInit()
 {
+	OutrunSetResolution();
+
 	System16ProcessAnalogControlsDo = OutrunProcessAnalogControls;
 	sega_315_5195_custom_io_do = OutrunReadIO;
 	sega_315_5195_custom_io_write_do = OutrunWriteIO;
@@ -2319,6 +2384,8 @@ static INT32 OutrunInit()
 
 static INT32 OutrunbInit()
 {
+	OutrunSetResolution();
+
 	System16ProcessAnalogControlsDo = OutrunProcessAnalogControls;
 	sega_315_5195_custom_io_do = OutrunReadIO;
 	sega_315_5195_custom_io_write_do = OutrunWriteIO;
@@ -2386,6 +2453,8 @@ static INT32 OutrunbInit()
 
 static INT32 ShangonInit()
 {
+	OutrunSetResolution();
+
 	System16ProcessAnalogControlsDo = ShangonProcessAnalogControls;
 	sega_315_5195_custom_io_do = ShangonReadIO;
 	sega_315_5195_custom_io_write_do = ShangonWriteIO;
@@ -2420,6 +2489,8 @@ static INT32 ShangonInit()
 
 static INT32 ToutrunInit()
 {
+	OutrunSetResolution();
+
 	System16ProcessAnalogControlsDo = OutrunProcessAnalogControls;
 	sega_315_5195_custom_io_do = OutrunReadIO;
 	sega_315_5195_custom_io_write_do = OutrunWriteIO;

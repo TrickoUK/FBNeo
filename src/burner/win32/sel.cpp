@@ -69,6 +69,10 @@ static int nDlgSearchSubDirsChbInitialPos[4];
 static int nDlgRomDirsBtnInitialPos[4];
 static int nDlgScanRomsBtnInitialPos[4];
 static int nDlgFilterGrpInitialPos[4];
+static int nDlgHwArcadeBtnInitialPos[4];
+static int nDlgHwConsoleBtnInitialPos[4];
+static int nDlgHwPreset1BtnInitialPos[4];
+static int nDlgHwPreset2BtnInitialPos[4];
 static int nDlgFilterTreeInitialPos[4];
 static int nDlgIpsGrpInitialPos[4];
 static int nDlgApplyIpsChbInitialPos[4];
@@ -139,6 +143,7 @@ HTREEITEM hFilterGba				= NULL;
 HTREEITEM hFilterNgp				= NULL;
 HTREEITEM hFilterChannelF			= NULL;
 HTREEITEM hFilterAstroHome			= NULL;
+HTREEITEM hFilterAtari2600			= NULL;
 HTREEITEM hFilterSms				= NULL;
 HTREEITEM hFilterGg					= NULL;
 HTREEITEM hFilterSg1000				= NULL;
@@ -299,8 +304,10 @@ static UINT64 ChannelFValue			= (UINT64)HARDWARE_PREFIX_CHANNELF >> 24;
 static UINT64 MASKCHANNELF			= (UINT64)1 << ChannelFValue;
 static UINT64 AstroHValue			= (UINT64)HARDWARE_ASTROHOME >> 24;
 static UINT64 MASKASTROHOME			= (UINT64)1 << AstroHValue;
+static UINT64 Atari2600Value			= (UINT64)HARDWARE_ATARI2600 >> 24;
+static UINT64 MASKATARI2600			= (UINT64)1 << Atari2600Value;
 
-static UINT64 MASKALL				= ((UINT64)MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 | MASKCPS3 | MASKDATAEAST | MASKGALAXIAN | MASKIREM | MASKKANEKO | MASKKONAMI | MASKNEOGEO | MASKPACMAN | MASKPGM | MASKPGM2 | MASKPSIKYO | MASKSEGA | MASKSETA | MASKTAITO | MASKTECHNOS | MASKTOAPLAN | MASKMISCPRE90S | MASKMISCPOST90S | MASKMEGADRIVE | MASKPCENGINE | MASKSMS | MASKGG | MASKSG1000 | MASKCOLECO | MASKMSX | MASKSPECTRUM | MASKMIDWAY | MASKNES | MASKFDS | MASKSNES | MASKNGP | MASKCHANNELF | MASKASTROHOME | MASKGBA );
+static UINT64 MASKALL				= ((UINT64)MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 | MASKCPS3 | MASKDATAEAST | MASKGALAXIAN | MASKIREM | MASKKANEKO | MASKKONAMI | MASKNEOGEO | MASKPACMAN | MASKPGM | MASKPGM2 | MASKPSIKYO | MASKSEGA | MASKSETA | MASKTAITO | MASKTECHNOS | MASKTOAPLAN | MASKMISCPRE90S | MASKMISCPOST90S | MASKMEGADRIVE | MASKPCENGINE | MASKSMS | MASKGG | MASKSG1000 | MASKCOLECO | MASKMSX | MASKSPECTRUM | MASKMIDWAY | MASKNES | MASKFDS | MASKSNES | MASKNGP | MASKCHANNELF | MASKASTROHOME | MASKGBA | MASKATARI2600 );
 
 #define SEARCHSUBDIRS			(1 << 26)
 #define UNAVAILABLE				(1 << 27)
@@ -319,12 +326,21 @@ static UINT64 MASKALL				= ((UINT64)MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 
 #define MASKCAPGRP				(MASKCAPMISC | MASKCPS | MASKCPS2 | MASKCPS3)
 #define MASKSEGAGRP				(MASKSEGA | MASKSG1000 | MASKSMS | MASKMEGADRIVE | MASKGG)
 
+// Hardware quick-select buttons (Arcade / Console / Preset 1 / Preset 2)
+// note: if new hardware is added to MASKALL, add it to one of these as well!
+#define MASKARCADE				(MASKCAPGRP | MASKCAVE | MASKDATAEAST | MASKGALAXIAN | MASKIREM | MASKKANEKO | MASKKONAMI | MASKMIDWAY | MASKNEOGEO | MASKPACMAN | MASKPGM | MASKPGM2 | MASKPSIKYO | MASKSEGA | MASKSETA | MASKTAITO | MASKTECHNOS | MASKTOAPLAN | MASKMISCPRE90S | MASKMISCPOST90S)
+#define MASKCONSOLE				(MASKMEGADRIVE | MASKPCENGINE | MASKSMS | MASKGG | MASKSG1000 | MASKCOLECO | MASKMSX | MASKSPECTRUM | MASKNES | MASKFDS | MASKSNES | MASKGBA | MASKNGP | MASKCHANNELF | MASKASTROHOME | MASKATARI2600)
+
 UINT64 nLoadMenuShowX			= 0; // hardware etc
+UINT64 nLoadMenuHwPreset[2]		= { 0, 0 }; // hardware presets, same format as nLoadMenuShowX (set bit = hidden)
+TCHAR szLoadMenuHwPresetName[2][MAX_PATH] = { _T(""), _T("") }; // custom button text, empty = default "Preset n"
 int nLoadMenuShowY				= AVAILABLE; // selector options, default to show available
 int nLoadMenuBoardTypeFilter	= 0;
 int nLoadMenuGenreFilter		= 0;
 int nLoadMenuFavoritesFilter	= 0;
 int nLoadMenuFamilyFilter		= 0;
+
+static HWND hHwPresetToolTip	= NULL;	// "hold shift" tooltip for the Preset buttons
 
 // expanded/collapsed state of filter nodes. default: expand main (0x01) & hardware (0x10)
 int nLoadMenuExpand             = 0x10 | 0x01;
@@ -418,6 +434,10 @@ static void GetInitialPositions()
 	GetInititalControlPos(IDC_SEL_SUBDIRS, nDlgSearchSubDirsChbInitialPos);
 	GetInititalControlPos(IDROM, nDlgRomDirsBtnInitialPos);
 	GetInititalControlPos(IDRESCAN, nDlgScanRomsBtnInitialPos);
+	GetInititalControlPos(IDC_SEL_HW_ARCADE, nDlgHwArcadeBtnInitialPos);
+	GetInititalControlPos(IDC_SEL_HW_CONSOLE, nDlgHwConsoleBtnInitialPos);
+	GetInititalControlPos(IDC_SEL_HW_PRESET1, nDlgHwPreset1BtnInitialPos);
+	GetInititalControlPos(IDC_SEL_HW_PRESET2, nDlgHwPreset2BtnInitialPos);
 	GetInititalControlPos(IDC_STATIC_SYS, nDlgFilterGrpInitialPos);
 	GetInititalControlPos(IDC_TREE2, nDlgFilterTreeInitialPos);
 	GetInititalControlPos(IDC_SEL_IPSGROUP, nDlgIpsGrpInitialPos);
@@ -895,8 +915,12 @@ static int SelListMake()
 	return 0;
 }
 
+static void HwPresetToolTipExit();
+
 static void MyEndDialog()
 {
+	HwPresetToolTipExit();
+
 	if (nTimer) {
 		KillTimer(hSelDlg, nTimer);
 		nTimer = 0;
@@ -1451,6 +1475,10 @@ static void RebuildEverything()
 	SendMessage(hSelList, WM_SETREDRAW, (WPARAM)FALSE,(LPARAM)TVI_ROOT);	// disable redraw
 	SendMessage(hSelList, TVM_DELETEITEM, 0, (LPARAM)TVI_ROOT);				// Destory all nodes
 	SelListMake();
+
+	HTREEITEM hTvRoot = TreeView_GetRoot(hSelList); // start @ the top of the list! -dink
+	if (hTvRoot) TreeView_SelectSetFirstVisible(hSelList, hTvRoot);
+
 	SendMessage(hSelList, WM_SETREDRAW, (WPARAM)TRUE, (LPARAM)TVI_ROOT);	// enable redraw
 
 	// Clear the things in our Info-box
@@ -1637,6 +1665,7 @@ static void CreateFilters()
 	_TVCreateFiltersA(hHardware		, IDS_SEL_NGP			, hFilterNgp			, nLoadMenuShowX & MASKNGP							);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_CHANNELF		, hFilterChannelF		, nLoadMenuShowX & MASKCHANNELF						);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_ASTROHOME		, hFilterAstroHome		, nLoadMenuShowX & MASKASTROHOME					);
+	_TVCreateFiltersA(hHardware		, IDS_SEL_ATARI2600		, hFilterAtari2600		, nLoadMenuShowX & MASKATARI2600					);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_MISCPRE90S	, hFilterMiscPre90s		, nLoadMenuShowX & MASKMISCPRE90S					);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_MISCPOST90S	, hFilterMiscPost90s	, nLoadMenuShowX & MASKMISCPOST90S					);
 
@@ -1671,6 +1700,7 @@ enum {
 	ICON_NGP,
 	ICON_CHANNELF,
 	ICON_ASTROHOME,
+	ICON_ATARI2600,
 	ICON_ENUMEND	// arcade
 };
 
@@ -1870,6 +1900,7 @@ static UINT32 __stdcall CacheDrvIconsProc(void* lpParam)
 				_T("icon_ngp"),
 				_T("icon_chf"),
 				_T("icon_astro"),
+				_T("icon_a2600"),
 				_T("icon_arc")
 			};
 
@@ -2052,7 +2083,7 @@ void LoadDrvIcons()
 
 		// By hardwares
 		if (bIconsByHardwares) {
-			if ((nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_MEGADRIVE) {
+			if ((nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_MEGADRIVE || (nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_MEGACD || (nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_32X) {
 				hDrvIcon[nDrvIndex] = pIconsCache[nDrvCount + ICON_MEGADRIVE];	continue;
 			}
 			else
@@ -2122,6 +2153,10 @@ void LoadDrvIcons()
 			if ((nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_ASTROHOME) {
 				hDrvIcon[nDrvIndex] = pIconsCache[nDrvCount + ICON_ASTROHOME];	continue;
 			}
+			else
+			if ((nCode & HARDWARE_PUBLIC_MASK) == HARDWARE_ATARI2600) {
+				hDrvIcon[nDrvIndex] = pIconsCache[nDrvCount + ICON_ATARI2600];	continue;
+			}
 			else {
 				hDrvIcon[nDrvIndex] = pIconsCache[nDrvCount + ICON_ENUMEND];	continue;
 			}
@@ -2149,6 +2184,236 @@ void UnloadDrvIcons()
 {
 	free(hDrvIcon); hDrvIcon = NULL;
 	bIconsLoaded = 0;
+}
+
+// Set the Hardware filter to nHidden (set bit = hidden) and sync the filter tree checkboxes
+static void SetHardwareFilter(UINT64 nHidden, bool bSegaGrpChecked = false)
+{
+	nLoadMenuShowX = (nLoadMenuShowX & ~MASKALL) | (nHidden & MASKALL);
+
+	struct { HTREEITEM hItem; UINT64 nMask; } HwList[] = {
+		{ hHardware,          MASKALL },
+		{ hFilterCapcomGrp,   MASKCAPGRP },
+		{ hFilterSegaGrp,     MASKSEGAGRP },
+		{ hFilterCapcomMisc,  MASKCAPMISC },
+		{ hFilterCave,        MASKCAVE },
+		{ hFilterCps1,        MASKCPS },
+		{ hFilterCps2,        MASKCPS2 },
+		{ hFilterCps3,        MASKCPS3 },
+		{ hFilterDataeast,    MASKDATAEAST },
+		{ hFilterGalaxian,    MASKGALAXIAN },
+		{ hFilterIrem,        MASKIREM },
+		{ hFilterKaneko,      MASKKANEKO },
+		{ hFilterKonami,      MASKKONAMI },
+		{ hFilterMidway,      MASKMIDWAY },
+		{ hFilterNeogeo,      MASKNEOGEO },
+		{ hFilterPacman,      MASKPACMAN },
+		{ hFilterPgm,         MASKPGM },
+		{ hFilterPgm2,        MASKPGM2 },
+		{ hFilterPsikyo,      MASKPSIKYO },
+		{ hFilterSg1000,      MASKSG1000 },
+		{ hFilterSms,         MASKSMS },
+		{ hFilterMegadrive,   MASKMEGADRIVE },
+		{ hFilterGg,          MASKGG },
+		{ hFilterSega,        MASKSEGA },
+		{ hFilterSeta,        MASKSETA },
+		{ hFilterTaito,       MASKTAITO },
+		{ hFilterTechnos,     MASKTECHNOS },
+		{ hFilterToaplan,     MASKTOAPLAN },
+		{ hFilterPce,         MASKPCENGINE },
+		{ hFilterColeco,      MASKCOLECO },
+		{ hFilterMsx,         MASKMSX },
+		{ hFilterSpectrum,    MASKSPECTRUM },
+		{ hFilterNes,         MASKNES },
+		{ hFilterFds,         MASKFDS },
+		{ hFilterSnes,        MASKSNES },
+		{ hFilterGba,         MASKGBA },
+		{ hFilterNgp,         MASKNGP },
+		{ hFilterChannelF,    MASKCHANNELF },
+		{ hFilterAstroHome,   MASKASTROHOME },
+		{ hFilterAtari2600,   MASKATARI2600 },
+		{ hFilterMiscPre90s,  MASKMISCPRE90S },
+		{ hFilterMiscPost90s, MASKMISCPOST90S },
+	};
+
+	for (UINT32 i = 0; i < sizeof(HwList) / sizeof(HwList[0]); i++) {
+		if (HwList[i].hItem) {
+			// parent/group nodes are checked only when none of their children are hidden
+			_TreeView_SetCheckState(hFilterList, HwList[i].hItem, (nLoadMenuShowX & HwList[i].nMask) ? FALSE : TRUE);
+		}
+	}
+
+	// Arcade / Console buttons: the Sega group holds both arcade & console hardware, so it
+	// would show as unchecked after either one - show it checked since its relevant entries are.
+	if (bSegaGrpChecked && hFilterSegaGrp) {
+		_TreeView_SetCheckState(hFilterList, hFilterSegaGrp, TRUE);
+	}
+
+	RebuildEverything();
+}
+
+#define HWPRESET_NAME_MAXLEN	16	// max. characters for the Preset button text
+
+static const INT32 nHwPresetBtnIDs[2] = { IDC_SEL_HW_PRESET1, IDC_SEL_HW_PRESET2 };
+
+// Returns the button text for a preset: the user's custom name, or the default "Preset n"
+static TCHAR* HwPresetGetName(INT32 nPreset)
+{
+	static TCHAR szName[MAX_PATH];
+
+	if (szLoadMenuHwPresetName[nPreset][0]) {
+		_tcsncpy(szName, szLoadMenuHwPresetName[nPreset], HWPRESET_NAME_MAXLEN);
+		szName[HWPRESET_NAME_MAXLEN] = 0;
+	} else {
+		_sntprintf(szName, MAX_PATH, FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_DEFNAME, true), nPreset + 1);
+		szName[MAX_PATH - 1] = 0;
+	}
+
+	return szName;
+}
+
+static void HwPresetUpdateButtonText()
+{
+	for (INT32 i = 0; i < 2; i++) {
+		SetDlgItemText(hSelDlg, nHwPresetBtnIDs[i], HwPresetGetName(i));
+	}
+}
+
+// Lock in the current Hardware filter selection as a preset (after OK/Cancel confirmation)
+static void HwPresetSave(INT32 nPreset)
+{
+	TCHAR szMsg[512];
+	TCHAR* pszName = HwPresetGetName(nPreset); // note: call before FBALoadStringEx(), it shares a static buffer w/GCC
+	_sntprintf(szMsg, 512, FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_CONFIRM, true), pszName);
+	szMsg[511] = 0;
+
+	if (MessageBox(hSelDlg, szMsg, FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_TITLE, true), MB_OKCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2) == IDOK) {
+		nLoadMenuHwPreset[nPreset] = nLoadMenuShowX & MASKALL;
+	}
+}
+
+static void HwPresetButton(INT32 nPreset)
+{
+	if (GetKeyState(VK_SHIFT) & 0x8000) {
+		HwPresetSave(nPreset);	// Shift + click
+	} else {
+		SetHardwareFilter(nLoadMenuHwPreset[nPreset]);
+	}
+}
+
+// Rename dialog -----------------------------------
+static INT32 nHwPresetRenaming = 0;
+
+static INT_PTR CALLBACK HwPresetNameProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM /*lParam*/)
+{
+	switch (Msg) {
+		case WM_INITDIALOG: {
+			HWND hEdit = GetDlgItem(hDlg, IDC_SEL_PRESETNAME_EDIT);
+			SendMessage(hEdit, EM_LIMITTEXT, HWPRESET_NAME_MAXLEN, 0);
+			SetWindowText(hEdit, HwPresetGetName(nHwPresetRenaming));
+			SendMessage(hEdit, EM_SETSEL, 0, -1);
+			SetFocus(hEdit);
+			WndInMid(hDlg, hSelDlg);
+			return FALSE; // we set the focus
+		}
+
+		case WM_COMMAND:
+			switch (LOWORD(wParam)) {
+				case IDOK: {
+					TCHAR szNew[HWPRESET_NAME_MAXLEN + 1] = _T("");
+					GetDlgItemText(hDlg, IDC_SEL_PRESETNAME_EDIT, szNew, HWPRESET_NAME_MAXLEN + 1);
+
+					// trim leading/trailing spaces, empty = back to the default name
+					TCHAR* p = szNew;
+					while (*p == _T(' ')) p++;
+					INT32 nLen = _tcslen(p);
+					while (nLen > 0 && p[nLen - 1] == _T(' ')) p[--nLen] = 0;
+
+					_tcscpy(szLoadMenuHwPresetName[nHwPresetRenaming], p);
+					EndDialog(hDlg, 1);
+					return TRUE;
+				}
+				case IDCANCEL:
+					EndDialog(hDlg, 0);
+					return TRUE;
+			}
+			break;
+
+		case WM_CLOSE:
+			EndDialog(hDlg, 0);
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void HwPresetRename(INT32 nPreset)
+{
+	nHwPresetRenaming = nPreset;
+
+	if (FBADialogBox(hAppInst, MAKEINTRESOURCE(IDD_SEL_PRESETNAME), hSelDlg, (DLGPROC)HwPresetNameProc) == 1) {
+		HwPresetUpdateButtonText();
+	}
+}
+
+// Right-click menu on the Preset buttons
+static void HwPresetContextMenu(INT32 nPreset, LPARAM lParam)
+{
+	enum { HWMENU_SET = 1, HWMENU_RENAME };
+
+	POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+	if (lParam == -1) { // opened from the keyboard (menu key / shift+F10): show under the button
+		RECT rect;
+		GetWindowRect(GetDlgItem(hSelDlg, nHwPresetBtnIDs[nPreset]), &rect);
+		pt.x = rect.left;
+		pt.y = rect.bottom;
+	}
+
+	HMENU hMenu = CreatePopupMenu();
+	if (hMenu == NULL) return;
+
+	AppendMenu(hMenu, MF_STRING, HWMENU_SET,    FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_MENU_SET, true));
+	AppendMenu(hMenu, MF_STRING, HWMENU_RENAME, FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_MENU_RENAME, true));
+
+	INT32 nCmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hSelDlg, NULL);
+	DestroyMenu(hMenu);
+
+	switch (nCmd) {
+		case HWMENU_SET:    HwPresetSave(nPreset);   break;
+		case HWMENU_RENAME: HwPresetRename(nPreset); break;
+	}
+}
+
+static void HwPresetToolTipInit()
+{
+	hHwPresetToolTip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hSelDlg, NULL, hAppInst, NULL);
+	if (hHwPresetToolTip == NULL) return;
+
+	SendMessage(hHwPresetToolTip, TTM_SETMAXTIPWIDTH, 0, 300); // allow word-wrap of longer tip
+
+
+	for (INT32 i = 0; i < 2; i++) {
+		TOOLINFO toolinfo;
+		memset(&toolinfo, 0, sizeof(TOOLINFO));
+
+		toolinfo.cbSize   = sizeof(TOOLINFO);
+		toolinfo.hwnd     = hSelDlg;
+		toolinfo.uFlags   = TTF_SUBCLASS | TTF_IDISHWND;
+		toolinfo.uId      = (UINT_PTR)GetDlgItem(hSelDlg, nHwPresetBtnIDs[i]);
+		toolinfo.hinst    = NULL;
+		toolinfo.lpszText = FBALoadStringEx(hAppInst, IDS_SEL_HWPRESET_TIP, true);
+
+		SendMessage(hHwPresetToolTip, TTM_ADDTOOL, 0, (LPARAM)&toolinfo);
+	}
+}
+
+static void HwPresetToolTipExit()
+{
+	if (hHwPresetToolTip) {
+		DestroyWindow(hHwPresetToolTip);
+		hHwPresetToolTip = NULL;
+	}
 }
 
 #define UM_CHECKSTATECHANGE (WM_USER + 100)
@@ -2254,6 +2519,8 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 		SetWindowLongPtr (GetDlgItem(hSelDlg, IDC_TREE2), GWL_STYLE, Style);
 
 		CreateFilters();
+		HwPresetToolTipInit();
+		HwPresetUpdateButtonText();
 
 		EnableWindow(GetDlgItem(hDlg, IDC_SEL_APPLYIPS), FALSE);
 		EnableWindow(GetDlgItem(hDlg, IDC_SEL_IPSMANAGER), FALSE);
@@ -2319,6 +2586,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterNgp, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterChannelF, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterAstroHome, FALSE);
+				_TreeView_SetCheckState(hFilterList, hFilterAtari2600, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterMidway, FALSE);
 
 				nLoadMenuShowX |= MASKALL;
@@ -2364,6 +2632,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterNgp, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterChannelF, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterAstroHome, TRUE);
+				_TreeView_SetCheckState(hFilterList, hFilterAtari2600, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterMidway, TRUE);
 
 				nLoadMenuShowX &= ~MASKALL; //0xf8000000; make this dynamic for future hardware additions -dink
@@ -2615,6 +2884,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 		if (hItemChanged == hFilterNgp)				_ToggleGameListing(nLoadMenuShowX, MASKNGP);
 		if (hItemChanged == hFilterChannelF)		_ToggleGameListing(nLoadMenuShowX, MASKCHANNELF);
 		if (hItemChanged == hFilterAstroHome)		_ToggleGameListing(nLoadMenuShowX, MASKASTROHOME);
+		if (hItemChanged == hFilterAtari2600)		_ToggleGameListing(nLoadMenuShowX, MASKATARI2600);
 		if (hItemChanged == hFilterMidway)			_ToggleGameListing(nLoadMenuShowX, MASKMIDWAY);
 
 		if (hItemChanged == hFilterBootleg)			_ToggleGameListing(nLoadMenuBoardTypeFilter, BDF_BOOTLEG);
@@ -2749,6 +3019,18 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				case IDC_SEL_APPLYIPS:
 					bDoIpsPatch = !bDoIpsPatch;
 					break;
+				case IDC_SEL_HW_ARCADE:
+					SetHardwareFilter(MASKALL & ~MASKARCADE, true);	// show only arcade hardware
+					break;
+				case IDC_SEL_HW_CONSOLE:
+					SetHardwareFilter(MASKALL & ~MASKCONSOLE, true);	// show only console / computer hardware
+					break;
+				case IDC_SEL_HW_PRESET1:
+					HwPresetButton(0);
+					break;
+				case IDC_SEL_HW_PRESET2:
+					HwPresetButton(1);
+					break;
 			}
 		}
 
@@ -2802,6 +3084,15 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				}
 
 				break;
+			}
+		}
+	}
+
+	if (Msg == WM_CONTEXTMENU) {
+		for (INT32 i = 0; i < 2; i++) {
+			if ((HWND)wParam == GetDlgItem(hDlg, nHwPresetBtnIDs[i])) {
+				HwPresetContextMenu(i, lParam);
+				return TRUE;
 			}
 		}
 	}
@@ -2867,6 +3158,10 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 		SetControlPosAlignTopRight(IDC_SEL_SUBDIRS, nDlgSearchSubDirsChbInitialPos);
 		SetControlPosAlignTopRight(IDROM, nDlgRomDirsBtnInitialPos);
 		SetControlPosAlignTopRight(IDRESCAN, nDlgScanRomsBtnInitialPos);
+		SetControlPosAlignTopRight(IDC_SEL_HW_ARCADE, nDlgHwArcadeBtnInitialPos);
+		SetControlPosAlignTopRight(IDC_SEL_HW_CONSOLE, nDlgHwConsoleBtnInitialPos);
+		SetControlPosAlignTopRight(IDC_SEL_HW_PRESET1, nDlgHwPreset1BtnInitialPos);
+		SetControlPosAlignTopRight(IDC_SEL_HW_PRESET2, nDlgHwPreset2BtnInitialPos);
 
 		SetControlPosAlignTopRightResizeVert(IDC_STATIC_SYS, nDlgFilterGrpInitialPos);
 		SetControlPosAlignTopRightResizeVert(IDC_TREE2, nDlgFilterTreeInitialPos);

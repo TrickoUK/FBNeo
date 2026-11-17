@@ -57,6 +57,8 @@
 #define IDD_HARDFXSETTINGS                  84
 #define IDD_ROMDATA_MANAGER					85
 #define IDD_ROMDATA_COVER_DLG				86
+#define IDD_HOTKEYS							87
+#define IDD_SEL_PRESETNAME					88
 
 #define IDR_MENU                        	100
 #define IDR_MENU_BLITTER_1					110
@@ -64,8 +66,10 @@
 #define IDR_MENU_BLITTER_3					112
 #define IDR_MENU_BLITTER_4					113
 #define IDR_MENU_BLITTER_5					114
+#define IDR_MENU_BLITTER_6					115
 #define IDR_MENU_AUD_PLUGIN_1				130
 #define IDR_MENU_AUD_PLUGIN_2				131
+#define IDR_MENU_AUD_PLUGIN_3				132
 #define	IDR_MENU_GAMESEL					140
 #define	IDR_MENU_LUAWINDOW					150
 #define IDR_ACCELERATOR                 	160
@@ -206,6 +210,11 @@
 #define IDC_SYSINFO_LOG_SAVE				20139
 #define IDC_LOCAL_DOWNLOAD_LANG				20140
 #define IDC_SEL_SEARCHTIMER					20141
+#define IDC_SEL_HW_ARCADE					20158
+#define IDC_SEL_HW_CONSOLE					20159
+#define IDC_SEL_HW_PRESET1					20160
+#define IDC_SEL_HW_PRESET2					20161
+#define IDC_SEL_PRESETNAME_EDIT				20162
 #define IDC_CHOOSE_MONITOR_HOR				20142
 #define IDC_CHOOSE_MONITOR_HOR_LIST			20143
 #define IDC_CHOOSE_MONITOR_VER				20144
@@ -487,50 +496,56 @@
 #define IDC_ROMSDIR_EDIT18               	21117
 #define IDC_ROMSDIR_EDIT19               	21118
 #define IDC_ROMSDIR_EDIT20               	21119
+#define IDC_ROMSDIR_EDIT21               	21120
+#define IDC_ROMSDIR_EDIT22               	21121
 
-#define IDC_ROMSDIR_TEXT1					21120
-#define IDC_ROMSDIR_TEXT2					21121
-#define IDC_ROMSDIR_TEXT3					21122
-#define IDC_ROMSDIR_TEXT4					21123
-#define IDC_ROMSDIR_TEXT5					21124
-#define IDC_ROMSDIR_TEXT6					21125
-#define IDC_ROMSDIR_TEXT7					21126
-#define IDC_ROMSDIR_TEXT8					21127
-#define IDC_ROMSDIR_TEXT9					21128
-#define IDC_ROMSDIR_TEXT10					21129
-#define IDC_ROMSDIR_TEXT11					21130
-#define IDC_ROMSDIR_TEXT12					21131
-#define IDC_ROMSDIR_TEXT13					21132
-#define IDC_ROMSDIR_TEXT14					21133
-#define IDC_ROMSDIR_TEXT15					21134
-#define IDC_ROMSDIR_TEXT16					21135
-#define IDC_ROMSDIR_TEXT17					21136
-#define IDC_ROMSDIR_TEXT18					21137
-#define IDC_ROMSDIR_TEXT19					21138
-#define IDC_ROMSDIR_TEXT20					21139
+#define IDC_ROMSDIR_TEXT1					21122
+#define IDC_ROMSDIR_TEXT2					21123
+#define IDC_ROMSDIR_TEXT3					21124
+#define IDC_ROMSDIR_TEXT4					21125
+#define IDC_ROMSDIR_TEXT5					21126
+#define IDC_ROMSDIR_TEXT6					21127
+#define IDC_ROMSDIR_TEXT7					21128
+#define IDC_ROMSDIR_TEXT8					21129
+#define IDC_ROMSDIR_TEXT9					21130
+#define IDC_ROMSDIR_TEXT10					21131
+#define IDC_ROMSDIR_TEXT11					21132
+#define IDC_ROMSDIR_TEXT12					21133
+#define IDC_ROMSDIR_TEXT13					21134
+#define IDC_ROMSDIR_TEXT14					21135
+#define IDC_ROMSDIR_TEXT15					21136
+#define IDC_ROMSDIR_TEXT16					21137
+#define IDC_ROMSDIR_TEXT17					21138
+#define IDC_ROMSDIR_TEXT18					21139
+#define IDC_ROMSDIR_TEXT19					21140
+#define IDC_ROMSDIR_TEXT20					21141
+#define IDC_ROMSDIR_TEXT21					21142
+#define IDC_ROMSDIR_TEXT22					21143
 
-#define IDC_ROMSDIR_BR1                 	21140
-#define IDC_ROMSDIR_BR2                 	21141
-#define IDC_ROMSDIR_BR3                 	21142
-#define IDC_ROMSDIR_BR4                 	21143
-#define IDC_ROMSDIR_BR5                 	21144
-#define IDC_ROMSDIR_BR6                 	21145
-#define IDC_ROMSDIR_BR7                 	21146
-#define IDC_ROMSDIR_BR8                 	21147
-#define IDC_ROMSDIR_BR9                 	21148
-#define IDC_ROMSDIR_BR10                 	21149
-#define IDC_ROMSDIR_BR11                 	21150
-#define IDC_ROMSDIR_BR12                 	21151
-#define IDC_ROMSDIR_BR13                 	21152
-#define IDC_ROMSDIR_BR14                 	21153
-#define IDC_ROMSDIR_BR15                 	21154
-#define IDC_ROMSDIR_BR16                 	21155
-#define IDC_ROMSDIR_BR17                 	21156
-#define IDC_ROMSDIR_BR18                 	21157
-#define IDC_ROMSDIR_BR19                 	21158
-#define IDC_ROMSDIR_BR20                 	21159
+#define IDC_ROMSDIR_BR1                 	21144
+#define IDC_ROMSDIR_BR2                 	21145
+#define IDC_ROMSDIR_BR3                 	21146
+#define IDC_ROMSDIR_BR4                 	21147
+#define IDC_ROMSDIR_BR5                 	21148
+#define IDC_ROMSDIR_BR6                 	21149
+#define IDC_ROMSDIR_BR7                 	21150
+#define IDC_ROMSDIR_BR8                 	21151
+#define IDC_ROMSDIR_BR9                 	21152
+#define IDC_ROMSDIR_BR10                 	21153
+#define IDC_ROMSDIR_BR11                 	21154
+#define IDC_ROMSDIR_BR12                 	21155
+#define IDC_ROMSDIR_BR13                 	21156
+#define IDC_ROMSDIR_BR14                 	21157
+#define IDC_ROMSDIR_BR15                 	21158
+#define IDC_ROMSDIR_BR16                 	21159
+#define IDC_ROMSDIR_BR17                 	21160
+#define IDC_ROMSDIR_BR18                 	21161
+#define IDC_ROMSDIR_BR19                 	21162
+#define IDC_ROMSDIR_BR20                 	21163
+#define IDC_ROMSDIR_BR21                 	21164
+#define IDC_ROMSDIR_BR22                 	21165
 
-#define IDDEFAULT							21160
+#define IDDEFAULT							21166
 
 #define IDC_ROMDATA_MANAGER					21200
 #define IDC_ROMDATA_LIST					21201
@@ -550,6 +565,14 @@
 #define IDC_ROMDATA_LABELDAT				21215
 #define IDC_ROMDATA_LABELDRIVER				21216
 #define IDC_ROMDATA_COVER_PREVIEW_PIC		21217
+
+#define IDC_HOTKEYS_LIST					21400
+#define IDC_HOTKEYS_STATUS					21401
+#define IDC_HOTKEYS_SET						21402
+#define IDC_HOTKEYS_SETALT					21403
+#define IDC_HOTKEYS_CLEAR					21404
+#define IDC_HOTKEYS_DEFAULT					21405
+#define IDC_HOTKEYS_RESETALL				21406
 
 #define MENU_LOAD                       	10001
 #define MENU_STARTNET			 			10002
@@ -591,6 +614,7 @@
 #define MENU_WINFS                          10101
 #define MENU_FULL                       	10102
 #define MENU_DWMFIX							10103
+#define MENU_VRR							10104
 #define MENU_NOSTRETCH                  	10110
 #define MENU_STRETCH                    	10111
 #define MENU_ASPECT                     	10112
@@ -648,12 +672,16 @@
 #define MENU_DSOUND_BASS                    10201
 #define MENU_XAUDIO_BASS                    10202
 #define MENU_XAUDIO_REVERB                  10203
+#define MENU_WASAPI_BASS                    10204
 #define MENU_DSOUND_NOSOUND					10210
 #define MENU_DSOUND_44100               	10213
 #define MENU_DSOUND_48000               	10214
 #define MENU_XAUDIO_NOSOUND					10220
 #define MENU_XAUDIO_44100                   10223
 #define MENU_XAUDIO_48000                   10224
+#define MENU_WASAPI_NOSOUND					10225
+#define MENU_WASAPI_44100                   10226
+#define MENU_WASAPI_48000                   10227
 #define MENU_INTERPOLATE_0					10230
 #define MENU_INTERPOLATE_1					10231
 #define MENU_INTERPOLATE_3					10233
@@ -813,6 +841,7 @@
 #define MENU_TRIPLESIZESCREEN_VERTICAL		10708
 #define MENU_QUADSIZESCREEN_VERTICAL		10709
 #define MENU_CDIMAGE                    	10710
+#define MENU_CD_CHANGE_DISC					10743
 #define MENU_START_NEOGEO_MVS				10711
 #define MENU_START_NEOGEO_CD				10712
 #define MENU_LOAD_NEOCD						10713
@@ -845,6 +874,8 @@
 #define MENU_CLRMAME_PRO_XML_CHANNELF_ONLY	10740
 #define MENU_CLRMAME_PRO_XML_ASTROHOME_ONLY	10741
 #define MENU_CLRMAME_PRO_XML_GBA_ONLY		10742
+#define MENU_CLRMAME_PRO_XML_ATARI2600_ONLY	10744
+#define MENU_CLRMAME_PRO_XML_32X_ONLY		10745
 
 #define MENU_INPUT_P1_DISABLE				10750
 #define MENU_INPUT_P1_SOCDN					10751
@@ -891,6 +922,7 @@
 #define MENU_INPUT_ALL_DEFAULT				10792
 
 #define MENU_INPUT_REDETECT                 10800
+#define MENU_INPUT_RUMBLE                   10801
 
 #define MENU_BASIC_NORMAL          	    	11001
 #define MENU_BASIC_SCAN                	    11002
@@ -1093,6 +1125,12 @@
 #define MENU_DX9_ALT_HARDWAREVERTEX			11703
 #define MENU_DX9_ALT_MOTIONBLUR				11704
 
+#define MENU_D3D11_SHADER_LOAD				11720
+#define MENU_D3D11_SHADER_NONE				11721
+#define MENU_D3D11_SHADER_PARAMS			11722
+#define MENU_D3D11_SHADER_MRU_CLEAR			11723
+#define MENU_D3D11_SHADER_MRU				11730	// 11730 - 11739: recently used shaders
+
 #define ID_LUA_OPEN							11812
 #define ID_LUA_CLOSE_ALL					11813
 
@@ -1111,6 +1149,12 @@
 #define GAMESEL_MENU_VIEWEMMA				11902
 #define GAMESEL_MENU_FAVORITE				11903
 #define GAMESEL_MENU_ROMDATA				11904
+#define MENU_UI_LIGHT_MODE                  11905
+#define MENU_UI_DARK_MODE                   11906
+#define BMP_DARK_MODE_SPLASH                11907 
+#define MENU_UI_DEFAULT_MODE                11908
+
+#define MENU_HOTKEYS                        11960
 
 // Next default values for new objects
 //

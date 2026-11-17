@@ -2,6 +2,7 @@
 #include "burner.h"
 #include "neocdlist.h"
 #include "pcecdlist.h"
+#include "segacdlist.h"
 
 int bDrvOkay = 0;						// 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions
 
@@ -26,6 +27,8 @@ TCHAR szAppRomPaths[DIRS_MAX][MAX_PATH] = {
 	{ _T("roms/channelf/")	},
 	{ _T("roms/astrocade/")	},
 	{ _T("roms/romdata/")	},
+	{ _T("roms/atari2600/")	},
+	{ _T("roms/32x/")		},
 	{ _T("")				}
 };
 
@@ -173,7 +176,7 @@ static void NeoCDZRateChange()
 {
 	if (nAudSampleRate[nAudSelect] != 44100) {
 		nNeoCDZnAudSampleRateSave = nAudSampleRate[nAudSelect];
-		bprintf(PRINT_IMPORTANT, _T("Switching sound rate to 44100hz (from %dhz) as required by NeoGeo & PCE CD\n"), nNeoCDZnAudSampleRateSave);
+		bprintf(PRINT_IMPORTANT, _T("Switching sound rate to 44100hz (from %dhz) as required by NeoGeo, PCE & Sega CD\n"), nNeoCDZnAudSampleRateSave);
 		nAudSampleRate[nAudSelect] = 44100; // force 44100hz for CDDA
 	}
 }
@@ -200,7 +203,7 @@ int DrvInit(int nDrvNum, bool bRestore)
 	}
 
 	INT32 nHardware = BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK;
-	if (nHardware == HARDWARE_SNK_NEOCD || nHardware == HARDWARE_PCENGINE_PCE_CD) {
+	if (nHardware == HARDWARE_SNK_NEOCD || nHardware == HARDWARE_PCENGINE_PCE_CD || nHardware == HARDWARE_SEGA_MEGACD) {
 		if (CDEmuInit()) {
 			FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_CDEMU_INI_FAIL));
 			FBAPopupDisplay(PUF_TYPE_ERROR);
@@ -214,6 +217,9 @@ int DrvInit(int nDrvNum, bool bRestore)
 			NeoCDZRateChange();
 		} else if (nHardware == HARDWARE_PCENGINE_PCE_CD) {
 			PceCDInfo_Init();
+			NeoCDZRateChange();
+		} else if (nHardware == HARDWARE_SEGA_MEGACD) {
+			SegaCDInfo_Init();
 			NeoCDZRateChange();
 		}
 	}
