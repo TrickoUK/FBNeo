@@ -62,3 +62,11 @@ Test saves (`.state`, nvram) are disposable; delete stale ones if they block a b
 - Git: do NOT add Co-Authored-By or other Claude trailers to commits. Do not commit or push unless asked.
 - Don't pick laserdisc, music/rhythm or similar exotic titles as test games.
 - Host CPU governor is powersave, so performance numbers are noisy; don't blame it for slow frames without evidence.
+
+## Cross-core comparison (FBNeo vs MAME)
+
+- `tools/capture.py --core X.so --rom game.zip --out DIR [--start 4 --interval 1 --count 40]` takes timed RetroArch screenshots. Its append config sets `video_gpu_screenshot = "false"`, so shots are the core's native frame (e.g. 288x224), independent of window size. With the default `true` they are viewport grabs of differing size.
+- `tools/compare.py DIR_A DIR_B` aligns the two sequences by best shot offset, then writes side-by-side A | B | 4x-amplified diff images and `report.txt` to `DIR_A/../diff`. Needs only PIL (host python3, run with `-I`).
+- MAME core: `/var/home/bazzite/Projects/libretro/mame/mame_libretro.so`, ROMs in `/var/home/bazzite/Projects/mame-roms/roms`. Don't rebuild it while comparing.
+- Run captures one at a time (shared UDP port 55355). A capture started immediately after another once exited early; just rerun.
+- Timed shots are not frame-exact, so animated areas differ by phase. Look for differences that persist across many pairs (text, colours, layout).

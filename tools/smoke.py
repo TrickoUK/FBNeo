@@ -10,11 +10,13 @@ OUT = os.environ.get("OUT", "/tmp/fbneo-smoke"); SHOTS = os.path.join(OUT, "shot
 os.makedirs(SHOTS, exist_ok=True)
 secs = int(sys.argv[1]); names = sys.argv[2:]
 cfg = os.path.join(OUT, "append.cfg")
-open(cfg, "w").write(f'video_vsync = "false"\nnetwork_cmd_enable = "true"\nscreenshot_directory = "{SHOTS}"\nauto_screenshot_filename = "true"\n')
+PORT = 55400 + os.getpid() % 100  # own port so we never hit another session's RetroArch
+PIDF = os.path.join(OUT, "ra.pid")
+open(cfg, "w").write(f'video_vsync = "false"\nnetwork_cmd_enable = "true"\nnetwork_cmd_port = "{PORT}"\nconfig_save_on_exit = "false"\nscreenshot_directory = "{SHOTS}"\nauto_screenshot_filename = "true"\n')
 
 def screenshot(dest):
     before = set(glob.glob(f"{SHOTS}/*.png"))
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.sendto(b"SCREENSHOT", ("127.0.0.1", 55355)); s.close()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.sendto(b"SCREENSHOT", ("127.0.0.1", PORT)); s.close()
     for _ in range(50):
         new = set(glob.glob(f"{SHOTS}/*.png")) - before
         if new:
@@ -22,18 +24,20 @@ def screenshot(dest):
         time.sleep(0.1)
     return False
 
-def pids():
-    return subprocess.run(["pgrep", "-x", "retroarch"], capture_output=True, text=True).stdout.split()
+def mypid():
+    try: return int(open(PIDF).read())
+    except Exception: return 0
+def alive_():
+    try: os.kill(mypid(), 0); return mypid() > 0
+    except OSError: return False
 
 for n in names:
-    assert not pids(), "retroarch already running"
     logp = os.path.join(OUT, n + ".log")
-    p = subprocess.Popen(["distrobox", "enter", "mame-dev", "--", "retroarch", "-v", "--appendconfig", cfg,
-                          "-L", CORE, f"{ROMS}/{n}.zip"], stdout=open(logp, "wb"), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    p = subprocess.Popen(["distrobox", "enter", "mame-dev", "--", "sh", "-c", 'echo $$ > "$0"; exec timeout -s KILL 300 retroarch -v --appendconfig "$1" -L "$2" "$3"',
+                          PIDF, cfg, CORE, f"{ROMS}/{n}.zip"], stdout=open(logp, "wb"), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     time.sleep(secs)
-    alive = bool(pids()); shot = screenshot(os.path.join(OUT, n + ".png")) if alive else False
-    while pids():
-        subprocess.run(["pkill", "-9", "-x", "retroarch"]); time.sleep(0.3)
+    alive = alive_(); shot = screenshot(os.path.join(OUT, n + ".png")) if alive else False
+    if alive_(): os.kill(mypid(), 9)  # only our own process
     p.kill()
     txt = open(logp, "rb").read().decode("latin1")
     bad = [l for l in txt.splitlines() if re.search(r"(?i)fatal|segmentation|core dumped|\[ERROR\]", l)]
