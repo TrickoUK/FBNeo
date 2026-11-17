@@ -1644,11 +1644,10 @@ static INT32 DrvDraw()
 	memset (DrvTmpScreenA2, 0, nScreenWidth * nScreenHeight * 2);
 	memset (DrvTmpScreenB2, 0, nScreenWidth * nScreenHeight * 2);
 
-	render_and_copy_layers();
-
-	// mix sprites next frame (necessary 1frame sprite lag)
 	memset (DrvTmpScreenC,  0, nScreenWidth * nScreenHeight * 2);
 	if (nSpriteEnable & 1) skns_draw_sprites(DrvTmpScreenC, (UINT32*)DrvSprRAM, 0x4000, DrvGfxROM0, nGfxLen0, (UINT32*)DrvSprRegs, 0);
+
+	render_and_copy_layers();
 
 	if (nBurnBpp != 4) {
 		for (INT32 i = 0; i < nScreenWidth * nScreenHeight; i++) {
