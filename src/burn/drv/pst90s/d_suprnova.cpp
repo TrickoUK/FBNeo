@@ -1761,6 +1761,13 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		ba.nAddress = 0;
 		ba.szName	= "RAM Tiles";
 		BurnAcb(&ba);
+
+		// NOTE: sprites are drawn one frame ahead of being mixed in, so this bitmap carries state across frames.
+		ba.Data		= (UINT8*)DrvTmpScreenC;
+		ba.nLen		= 320 * 240 * sizeof(INT16);
+		ba.nAddress = 0;
+		ba.szName	= "Sprite Bitmap";
+		BurnAcb(&ba);
 	}
 
 	if (nAction & ACB_DRIVER_DATA) {
