@@ -27,6 +27,7 @@ static INT32 Bgareggabla = 0;
 static INT32 location_test = 0;
 
 static INT32 nCyclesExtra[2];
+static INT32 bFrameResume;	// A hardware frame is in progress: the last frame ended at vblank
 
 // Rom information
 
@@ -581,6 +582,8 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		}
 
 		SCAN_VAR(nCyclesExtra);
+		SCAN_VAR(nCyclesDone);
+		SCAN_VAR(bFrameResume);
 	}
 
 	return 0;
@@ -852,6 +855,7 @@ static INT32 DrvDoReset()
 	hold_coin.reset();
 
 	nCyclesExtra[0] = nCyclesExtra[1] = 0;
+	bFrameResume = 0;
 
 	HiscoreReset();
 
@@ -1008,6 +1012,31 @@ static INT32 DrvDraw()
 	return 0;
 }
 
+// Runs one interleave slice: the 68000, then the Z80, then the sound for the slice
+static void DrvRunSlice(INT32 nSlice, INT32 nInterleave, INT32& nSoundBufferPos)
+{
+	// Run 68000
+	INT32 nNext = nSlice * nCyclesTotal[0] / nInterleave;
+	nCyclesSegment = nNext - nCyclesDone[0];
+	nCyclesDone[0] += SekRun(nCyclesSegment);
+	nIRQPending = 0;
+
+	// Run Z80
+	nNext = nSlice * nCyclesTotal[1] / nInterleave;
+	nCyclesSegment = nNext - nCyclesDone[1];
+	nCyclesDone[1] += ZetRun(nCyclesSegment);
+
+	// Render sound segment
+	if (pBurnSoundOut) {
+		// Segment length of this slice of the hardware frame
+		INT32 nSegmentLength = (nBurnSoundLen * nSlice / nInterleave) - (nBurnSoundLen * (nSlice - 1) / nInterleave);
+		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+		BurnYM2151Render(pSoundBuf, nSegmentLength);
+		MSM6295Render(0, pSoundBuf, nSegmentLength);
+		nSoundBufferPos += nSegmentLength;
+	}
+}
+
 static INT32 DrvFrame()
 {
 	INT32 nInterleave = 8;
@@ -1031,87 +1060,78 @@ static INT32 DrvFrame()
 	hold_coin.check(0, DrvInput[2], 1 << 3, 1);
 	hold_coin.check(1, DrvInput[2], 1 << 4, 1);
 
-	SekNewFrame();
-
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * TOA_REFRESHRATE));
 	nCyclesTotal[1] = (INT32)((INT64)TOA_Z80_SPEED * nBurnCPUSpeedAdjust / (0x0100 * TOA_REFRESHRATE)); // OC is required to avoid "sound error"
-	nCyclesDone[0] = nCyclesExtra[0];
-	nCyclesDone[1] = nCyclesExtra[1];
-
-	SekOpen(0);
-
-	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262); // 0
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bool bVBlank = false;
 
 	INT32 nSoundBufferPos = 0;
+	INT32 bFirstFrame = !bFrameResume;
 
+	SekOpen(0);
 	ZetOpen(0);
-	for (INT32 i = 1; i <= nInterleave; i++) {
-		// Run 68000
-		INT32 nCurrentCPU = 0;
-		INT32 nNext = i * nCyclesTotal[nCurrentCPU] / nInterleave;
 
-		// Trigger VBlank interrupt
-		if (!bVBlank && nNext > nToaCyclesVBlankStart) {
-			if (nCyclesDone[nCurrentCPU] < nToaCyclesVBlankStart) {
-				nCyclesSegment = nToaCyclesVBlankStart - nCyclesDone[nCurrentCPU];
-				nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
-			}
+	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 
-			nIRQPending = 1;
-			SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+	// A frame (one retro_run) ends at the start of vblank (line 240), where the sprite list is buffered, the screen drawn
+	// and the vblank interrupt raised. The next frame starts there, so the interrupt is taken right after that frame's
+	// controls have been polled; the rest of the hardware frame (its last slice) is run first.
 
-			ToaBufferGP9001Sprites();
+	if (bFrameResume) {
+		// Finish the hardware frame: the last slice, after vblank
+		DrvRunSlice(nInterleave, nInterleave, nSoundBufferPos);
 
-			if (pBurnDraw) {
-				DrvDraw();												// Draw screen if needed
-			}
+		nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
+		nCyclesExtra[1] = nCyclesDone[1] - nCyclesTotal[1];
+	}
 
-			bVBlank = true;
-		}
+	// Start the next hardware frame
+	SekNewFrame();
+	nCyclesDone[0] = nCyclesExtra[0];
+	nCyclesDone[1] = nCyclesExtra[1];
+	bFrameResume = 1;
 
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
-		nIRQPending = 0;
+	for (INT32 i = 1; i < nInterleave; i++) {
+		DrvRunSlice(i, nInterleave, nSoundBufferPos);
+	}
 
-		// Run Z80
-		nCurrentCPU = 1;
-		nNext = i * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += ZetRun(nCyclesSegment);
+	// Run the last slice up to the start of vblank
+	if (nCyclesDone[0] < nToaCyclesVBlankStart) {
+		nCyclesSegment = nToaCyclesVBlankStart - nCyclesDone[0];
+		nCyclesDone[0] += SekRun(nCyclesSegment);
+	}
 
-		// Render sound segment
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = (nBurnSoundLen * i / nInterleave) - nSoundBufferPos;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			MSM6295Render(0, pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
+	nIRQPending = 1;
+	SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+
+	ToaBufferGP9001Sprites();
+
+	if (pBurnDraw) {
+		DrvDraw();														// Draw screen if needed
 	}
 
 	SekClose();
-	
+
 	{
 		// Make sure the buffer is entirely filled.
 		if (pBurnSoundOut) {
 			INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
 			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
 			if (nSegmentLength) {
-				BurnYM2151Render(pSoundBuf, nSegmentLength);
-				MSM6295Render(0, pSoundBuf, nSegmentLength);
+				// The last slice of the first frame only exists in the next one: leave its sound silent
+				if (bFirstFrame) {
+					memset(pSoundBuf, 0, nSegmentLength * 2 * sizeof(INT16));
+				} else {
+					BurnYM2151Render(pSoundBuf, nSegmentLength);
+					MSM6295Render(0, pSoundBuf, nSegmentLength);
+				}
 			}
 			BurnSoundTweakVolume(pBurnSoundOut, nBurnSoundLen, 0.65);
 		}
 	}
-	
-	ZetClose();
 
-	nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
-	nCyclesExtra[1] = nCyclesDone[1] - nCyclesTotal[1];
+	ZetClose();
 
 	return 0;
 }

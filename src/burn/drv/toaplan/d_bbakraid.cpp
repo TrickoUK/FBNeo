@@ -24,6 +24,7 @@ static HoldCoin<2> hold_coin;
 static UINT8 DrvReset = 0;
 
 static UINT8 nIRQPending;
+static INT32 bFrameResume;	// A hardware frame is in progress: the last frame ended at vblank
 
 static INT32 nSoundData[4];
 static UINT8 nSoundlatchAck;
@@ -750,6 +751,7 @@ static INT32 DrvDoReset()
 	YMZ280BReset();
 	
 	nCyclesDone[0] = nCyclesDone[1] = 0;
+	bFrameResume = 0;
 	
 	BurnTimerReset();
 	ZetOpen(0);
@@ -918,6 +920,17 @@ static INT32 DrvDraw()
 	return 0;
 }
 
+// Renders the sound for the two slices of the hardware frame that end at slice nSlice
+static void DrvRenderSound(INT32 nSlice, INT32 nInterleave, INT32& nSoundBufferPos)
+{
+	if (pBurnSoundOut) {
+		INT32 nSegmentLength = (nBurnSoundLen * nSlice / nInterleave) - (nBurnSoundLen * (nSlice - 2) / nInterleave);
+		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+		YMZ280BRender(pSoundBuf, nSegmentLength);
+		nSoundBufferPos += nSegmentLength;
+	}
+}
+
 static INT32 DrvFrame()
 {
 	INT32 nInterleave = 8;
@@ -941,9 +954,6 @@ static INT32 DrvFrame()
 	hold_coin.check(0, DrvInput[2], 1 << 3, 1);
 	hold_coin.check(1, DrvInput[2], 1 << 4, 1);
 
-	SekNewFrame();
-	ZetNewFrame();
-
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
 #ifdef ADJUST_Z80_SPEED
 	nCyclesTotal[1] = nCyclesTotal[0] / 4;
@@ -951,79 +961,88 @@ static INT32 DrvFrame()
 	nCyclesTotal[1] = TOA_Z80_SPEED / 60;
 #endif
 
-	SekOpen(0);
-	
-	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262);
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bool bVBlank = false;
 
 	INT32 nSoundBufferPos = 0;
+	INT32 bFirstFrame = !bFrameResume;
 
+	SekOpen(0);
 	ZetOpen(0);
+
+	SekSetCyclesScanline(nCyclesTotal[0] / 262);
+
+	// A frame (one retro_run) ends at the start of vblank (line 240), where the vblank interrupt is raised, the sprite
+	// list buffered and the screen drawn. The next frame starts there, so the interrupt is taken right after that
+	// frame's controls have been polled; the rest of the hardware frame (its last slice) is run first.
+
+	if (bFrameResume) {
+		// Finish the hardware frame: the last slice, after vblank
+		nCyclesSegment = nCyclesTotal[0] - SekTotalCycles();
+		SekRun(nCyclesSegment);
+
+		DrvRenderSound(nInterleave, nInterleave, nSoundBufferPos);
+
+		nCycles68KSync = SekTotalCycles();
+		BurnTimerEndFrame(nCyclesTotal[1]);
+
+		nCyclesDone[0] = SekTotalCycles() - nCyclesTotal[0];
+		nCyclesDone[1] = ZetTotalCycles() - nCyclesTotal[1];
+	}
+
+	// Start the next hardware frame
+	SekNewFrame();
+	ZetNewFrame();
+	bFrameResume = 1;
 
 	SekIdle(nCyclesDone[0]);
 	ZetIdle(nCyclesDone[1]);
 
-	for (INT32 i = 1; i <= nInterleave; i++) {
-		INT32 nNext;
-
+	for (INT32 i = 1; i < nInterleave; i++) {
 		// Run 68000
-
-		nNext = i * nCyclesTotal[0] / nInterleave;
-
-		// Trigger VBlank interrupt
-		if (!bVBlank && nNext > nToaCyclesVBlankStart) {
-			if (SekTotalCycles() < nToaCyclesVBlankStart) {
-				nCyclesSegment = nToaCyclesVBlankStart - SekTotalCycles();
-				SekRun(nCyclesSegment);
-			}
-
-			nIRQPending = 1;
-			SekSetIRQLine(3, CPU_IRQSTATUS_ACK);
-
-			ToaBufferGP9001Sprites();
-
-			if (pBurnDraw) {											// Draw screen if needed
-				DrvDraw();
-			}
-
-			bVBlank = true;
-		}
+		INT32 nNext = i * nCyclesTotal[0] / nInterleave;
 
 		nCyclesSegment = nNext - SekTotalCycles();
 		SekRun(nCyclesSegment);
 
 		if ((i & 1) == 0) {
-			// Render sound segment
-			if (pBurnSoundOut) {
-				INT32 nSegmentEnd = nBurnSoundLen * i / nInterleave;
-				INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-				YMZ280BRender(pSoundBuf, nSegmentEnd - nSoundBufferPos);
-				nSoundBufferPos = nSegmentEnd;
-			}
+			DrvRenderSound(i, nInterleave, nSoundBufferPos);
 		}
 	}
 
-	nCycles68KSync = SekTotalCycles();
-	BurnTimerEndFrame(nCyclesTotal[1]);
+	// Run the last slice up to the start of vblank
+	if (SekTotalCycles() < nToaCyclesVBlankStart) {
+		nCyclesSegment = nToaCyclesVBlankStart - SekTotalCycles();
+		SekRun(nCyclesSegment);
+	}
 
-	nCyclesDone[0] = SekTotalCycles() - nCyclesTotal[0];
-	nCyclesDone[1] = ZetTotalCycles() - nCyclesTotal[1];
+	nIRQPending = 1;
+	SekSetIRQLine(3, CPU_IRQSTATUS_ACK);
+
+	ToaBufferGP9001Sprites();
+
+	if (pBurnDraw) {													// Draw screen if needed
+		DrvDraw();
+	}
 
 	SekClose();
-	
+
 	{
 		// Make sure the buffer is entirely filled.
 		if (pBurnSoundOut) {
 			INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
 			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
 			if (nSegmentLength) {
-				YMZ280BRender(pSoundBuf, nSegmentLength);
+				// The last slice of the first frame only exists in the next one: leave its sound silent
+				if (bFirstFrame) {
+					memset(pSoundBuf, 0, nSegmentLength * 2 * sizeof(INT16));
+				} else {
+					YMZ280BRender(pSoundBuf, nSegmentLength);
+				}
 			}
 		}
 	}
-	
+
 	ZetClose();
 
 	return 0;
@@ -1060,6 +1079,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(nCyclesDone);			// used as rollover cycles
 		SCAN_VAR(Z80BusRQ);
 		SCAN_VAR(nIRQPending);
+		SCAN_VAR(bFrameResume);
 		SCAN_VAR(nTextROMStatus);
 
 		hold_coin.scan();

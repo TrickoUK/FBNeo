@@ -38,6 +38,9 @@ static INT32 nCycles68KSync;
 
 static INT32 nPrevBurnCPUSpeedAdjust;
 
+static INT32 bFrameResume;	// A hardware frame is in progress: the last frame ended at vblank
+static INT32 nVBlankSlice;	// Interleave slice of that frame that contains vblank
+
 // ----------------------------------------------------------------------------
 // Input definitions
 
@@ -1372,6 +1375,7 @@ static INT32 DrvDoReset()
 	nSoundlatchAck = 1;
 
 	nCyclesDone[0] = nCyclesDone[1] = 0;
+	bFrameResume = 0;
 
 	HiscoreReset();
 
@@ -1678,9 +1682,6 @@ static INT32 DrvFrame()
 		DrvInput[1] |= (DrvInp2[i] & 1) << (i + 8);
 	}
 
-	SekNewFrame();
-	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) ZetNewFrame();
-	
 	SekOpen(0);
 
 	if (nPrevBurnCPUSpeedAdjust != nBurnCPUSpeedAdjust) {
@@ -1696,9 +1697,61 @@ static INT32 DrvFrame()
 	}
 
 	nCyclesVBlank = nCyclesTotal[0] * (INT32)(224.0 * 2.0) / (INT32)(263.5 * 2.0);
-	bVBlank = 0x01;
 
 	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) ZetOpen(0);
+
+	// A frame (one retro_run) ends at the start of vblank (line 224), where the screen is drawn, the sprite list
+	// buffered and the vblank interrupt raised. The next frame starts there, so the interrupt is taken right after
+	// that frame's controls have been polled; the rest of the hardware frame is run first, up to the sound update.
+	// The sound is produced once per hardware frame, so each frame returns the sound of the hardware frame before it.
+	if (bFrameResume) {
+		// Finish the hardware frame: the slices after vblank
+		for (INT32 i = nVBlankSlice; i <= nInterleave; i++) {
+			INT32 nNext = i * nCyclesTotal[0] / nInterleave;
+
+			nCyclesSegment = nNext - nCyclesDone[0];
+			nCyclesDone[0] += SekRun(nCyclesSegment);
+		}
+
+		switch (PsikyoHardwareVersion) {
+			case PSIKYO_HW_SAMURAIA:
+			case PSIKYO_HW_GUNBIRD: {
+				nCycles68KSync = SekTotalCycles();
+				BurnTimerEndFrame(nCyclesTotal[1]);
+				if (pBurnSoundOut) BurnYM2610Update(pBurnSoundOut, nBurnSoundLen);
+				break;
+			}
+			case PSIKYO_HW_S1945:
+			case PSIKYO_HW_TENGAI: {
+				nCycles68KSync = SekTotalCycles();
+				BurnTimerEndFrame(nCyclesTotal[1]);
+				if (pBurnSoundOut) BurnYMF278BUpdate(nBurnSoundLen);
+				break;
+			}
+			case PSIKYO_HW_S1945BL: {
+				MSM6295Render(0, pBurnSoundOut, nBurnSoundLen);
+				break;
+			}
+			default: {
+				ZetIdle(nCyclesTotal[1] - ZetTotalCycles());
+			}
+		}
+
+		nCyclesDone[0] = SekTotalCycles() - nCyclesTotal[0];
+		if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) {
+			nCyclesDone[1] = ZetTotalCycles() - nCyclesTotal[1];
+		}
+	} else {
+		// The sound of the first frame is that of the hardware frame that ends in the next one
+		if (pBurnSoundOut) memset(pBurnSoundOut, 0, nBurnSoundLen * 2 * sizeof(INT16));
+	}
+
+	// Start the next hardware frame
+	SekNewFrame();
+	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) ZetNewFrame();
+	bFrameResume = 1;
+
+	bVBlank = 0x01;
 
 	SekIdle(nCyclesDone[0]);
 	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) ZetIdle(nCyclesDone[1]);
@@ -1722,41 +1775,17 @@ static INT32 DrvFrame()
 
 			SekSetIRQLine(1, CPU_IRQSTATUS_AUTO);
 			bVBlank = 0x00;
+
+			// The frame ends here: the slice containing vblank is finished in the next frame
+			nVBlankSlice = i;
+			break;
 		}
 
 		nCyclesSegment = nNext - nCyclesDone[0];
 		nCyclesDone[0] += SekRun(nCyclesSegment);
 	}
 
-	switch (PsikyoHardwareVersion) {
-		case PSIKYO_HW_SAMURAIA:
-		case PSIKYO_HW_GUNBIRD: {
-			nCycles68KSync = SekTotalCycles();
-			BurnTimerEndFrame(nCyclesTotal[1]);
-			if (pBurnSoundOut) BurnYM2610Update(pBurnSoundOut, nBurnSoundLen);
-			break;
-		}
-		case PSIKYO_HW_S1945:
-		case PSIKYO_HW_TENGAI: {
-			nCycles68KSync = SekTotalCycles();
-			BurnTimerEndFrame(nCyclesTotal[1]);
-			if (pBurnSoundOut) BurnYMF278BUpdate(nBurnSoundLen);
-			break;
-		}
-		case PSIKYO_HW_S1945BL: {
-			MSM6295Render(0, pBurnSoundOut, nBurnSoundLen);
-			break;
-		}
-		default: {
-			ZetIdle(nCyclesTotal[1] - ZetTotalCycles());
-		}
-	}
-
-	nCyclesDone[0] = SekTotalCycles() - nCyclesTotal[0];
-	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) {
-		nCyclesDone[1] = ZetTotalCycles() - nCyclesTotal[1];
-		ZetClose();
-	}
+	if (PsikyoHardwareVersion != PSIKYO_HW_S1945BL) ZetClose();
 	SekClose();
 
 	return 0;
@@ -1854,6 +1883,8 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(nCyclesDone);
 
 		SCAN_VAR(bVBlank);
+		SCAN_VAR(bFrameResume);
+		SCAN_VAR(nVBlankSlice);
 
 		switch (PsikyoHardwareVersion) {
 			case PSIKYO_HW_SAMURAIA:
