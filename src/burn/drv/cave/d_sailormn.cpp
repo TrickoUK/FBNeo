@@ -42,6 +42,9 @@ static INT8 nUnknownIRQ;
 static INT32 nCaveCyclesDone[2];
 static INT32 nCyclesExtra[2];
 
+static INT32 bFrameResume;	// A hardware frame is in progress: the last frame ended at vblank
+static INT32 nVBlankSlice;	// Interleave slice of that frame that contains vblank
+
 static INT32 agalletamode = 0;
 static INT32 nWhichGame;	// 0 - sailormn/sailormno
 							// 1 - agallet
@@ -526,6 +529,7 @@ static INT32 DrvDoReset()
 	BurnYM2151Reset();
 
 	nCyclesExtra[0] = nCyclesExtra[1] = 0;
+	bFrameResume = 0;
 
 	HiscoreReset();
 
@@ -570,13 +574,13 @@ static INT32 DrvFrame()
 
 	INT32 nCyclesSegment;
 
-	if (DrvReset) {														// Reset machine
+	if (DrvReset) {												// Reset machine
 		DrvDoReset();
 	}
 
 	// Compile digital inputs
-	DrvInput[0] = 0x0000;  												// Player 1
-	DrvInput[1] = 0x0000;  												// Player 2
+	DrvInput[0] = 0x0000;  										// Player 1
+	DrvInput[1] = 0x0000;  										// Player 2
 	for (INT32 i = 0; i < 10; i++) {
 		DrvInput[0] |= (DrvJoy1[i] & 1) << i;
 		DrvInput[1] |= (DrvJoy2[i] & 1) << i;
@@ -584,24 +588,84 @@ static INT32 DrvFrame()
 	CaveClearOpposites(&DrvInput[0]);
 	CaveClearOpposites(&DrvInput[1]);
 
-	SekNewFrame();
-
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * CAVE_REFRESHRATE));
-	nCaveCyclesDone[0] = nCyclesExtra[0];
 #if 0
 	nCyclesTotal[1] = (INT32)((INT64)8000000 * nBurnCPUSpeedAdjust / (0x0100 * CAVE_REFRESHRATE));
 #else
 	nCyclesTotal[1] = (INT32)(8000000 / CAVE_REFRESHRATE);
 #endif
-	nCaveCyclesDone[1] = nCyclesExtra[1];
 
 	nCyclesVBlank = nCyclesTotal[0] - (INT32)((nCyclesTotal[0] * CAVE_VBLANK_LINES) / 271.5);
-	nVBlank = 0;
 
 	INT32 nSoundBufferPos = 0;
+	INT32 bResumed = bFrameResume;
 
 	SekOpen(0);
 	ZetOpen(0);
+
+	// A frame (one retro_run) ends at the start of vblank, where the screen is drawn and the vblank interrupt
+	// raised. The next frame starts there, so the interrupt is taken right after that frame's controls have been
+	// polled; the rest of the hardware frame is run first. The sound is rendered in slices through the frame, so
+	// each frame returns the end of the previous hardware frame followed by the start of its own.
+	if (bResumed) {
+		for (INT32 i = nVBlankSlice; i < nInterleave; i++) {
+			INT32 nCurrentCPU;
+			INT32 nNext;
+
+			// Run 68000
+
+			nCurrentCPU = 0;
+			nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
+
+			nCyclesSegment = nNext - nCaveCyclesDone[nCurrentCPU];
+			nCaveCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
+
+			// Run Z80
+			nCurrentCPU = 1;
+			nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
+			nCyclesSegment = nNext - nCaveCyclesDone[nCurrentCPU];
+			nCaveCyclesDone[nCurrentCPU] += ZetRun(nCyclesSegment);
+
+			{
+				// Render sound segment
+				if (pBurnSoundOut) {
+					INT32 nSegmentLength = nBurnSoundLen / nInterleave;
+					INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+					BurnYM2151Render(pSoundBuf, nSegmentLength);
+					MSM6295Render(pSoundBuf, nSegmentLength);
+					nSoundBufferPos += nSegmentLength;
+				}
+			}
+		}
+
+		if (agalletamode&0xff) { // "agalleta" watchdog boot kludge
+			agalletamode = 0x2000 | ((agalletamode&0xff) - 1);
+			if ((agalletamode&0xff) == 0) {
+				SekReset();
+			}
+		}
+
+		nCyclesExtra[0] = nCaveCyclesDone[0] - nCyclesTotal[0];
+		nCyclesExtra[1] = nCaveCyclesDone[1] - nCyclesTotal[1];
+
+		// Make sure the buffer is entirely filled: the rounding remainder ends the hardware frame
+		if (pBurnSoundOut) {
+			INT32 nSegmentLength = nBurnSoundLen - (nBurnSoundLen / nInterleave) * nInterleave;
+			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+			if (nSegmentLength) {
+				BurnYM2151Render(pSoundBuf, nSegmentLength);
+				MSM6295Render(pSoundBuf, nSegmentLength);
+				nSoundBufferPos += nSegmentLength;
+			}
+		}
+	}
+
+	// Start the next hardware frame
+	SekNewFrame();
+	nCaveCyclesDone[0] = nCyclesExtra[0];
+	nCaveCyclesDone[1] = nCyclesExtra[1];
+	nVBlank = 0;
+	bFrameResume = 1;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
 		INT32 nCurrentCPU;
@@ -628,6 +692,10 @@ static INT32 DrvFrame()
 			nVBlank = 1;
 			nVideoIRQ = 0;
 			UpdateIRQStatus();
+
+			// The frame ends here: the rest of this slice is run in the next frame
+			nVBlankSlice = i;
+			break;
 		}
 
 		nCyclesSegment = nNext - nCaveCyclesDone[nCurrentCPU];
@@ -652,29 +720,15 @@ static INT32 DrvFrame()
 
 	}
 
-	if (agalletamode&0xff) { // "agalleta" watchdog boot kludge
-		agalletamode = 0x2000 | ((agalletamode&0xff) - 1);
-		if ((agalletamode&0xff) == 0) {
-			SekReset();
-		}
-	}
-
-	nCyclesExtra[0] = nCaveCyclesDone[0] - nCyclesTotal[0];
-	nCyclesExtra[1] = nCaveCyclesDone[1] - nCyclesTotal[1];
 	SekClose();
 
 	{
-		// Make sure the buffer is entirely filled.
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			if (nSegmentLength) {
-				BurnYM2151Render(pSoundBuf, nSegmentLength);
-				MSM6295Render(pSoundBuf, nSegmentLength);
-			}
+		// The first frame has no end of a previous hardware frame to return: the sound after vblank is that of the next frame
+		if (pBurnSoundOut && nSoundBufferPos < nBurnSoundLen) {
+			memset(pBurnSoundOut + (nSoundBufferPos << 1), 0, (nBurnSoundLen - nSoundBufferPos) * 2 * sizeof(INT16));
 		}
 	}
-	
+
 	ZetClose();
 
 	return 0;
@@ -881,6 +935,10 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(nSoundIRQ);
 		SCAN_VAR(nUnknownIRQ);
 		SCAN_VAR(nCyclesExtra);
+		SCAN_VAR(nCaveCyclesDone);
+		SCAN_VAR(nVBlank);
+		SCAN_VAR(bFrameResume);
+		SCAN_VAR(nVBlankSlice);
 
 		SCAN_VAR(agalletamode);
 
