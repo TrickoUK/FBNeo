@@ -70,3 +70,17 @@ Test saves (`.state`, nvram) are disposable; delete stale ones if they block a b
 - MAME core: `/var/home/bazzite/Projects/libretro/mame/mame_libretro.so`, ROMs in `/var/home/bazzite/Projects/mame-roms/roms`. Don't rebuild it while comparing.
 - Run captures one at a time (shared UDP port 55355). A capture started immediately after another once exited early; just rerun.
 - Timed shots are not frame-exact, so animated areas differ by phase. Look for differences that persist across many pairs (text, colours, layout).
+
+## my-docs (private working docs)
+
+- `my-docs/` is a nested git repo (`TrickoUK/fbneo-working-docs`, branch `main`), not part of this repo. It is hidden from the outer repo by a `/my-docs/` line in `.git/info/exclude` (not `.gitignore`).
+- Commit inside it (`cd my-docs && git ...`), never into the outer repo. Ask before pushing.
+- Content: documents plus reusable scripts and tool source only. Never generated output (screenshots, video, binaries, run results), scratch files, secrets or session info. Its `.gitignore` and pre-commit hook enforce this; tool results go in `my-docs/out/` (ignored).
+- New documents (investigations, plans, notes) go in `my-docs/` by default. See `my-docs/README.md` for the layout.
+
+## Background jobs and progress reports
+
+- Never wait for a background job with `pgrep -f <pattern>` in an `until` loop: `pgrep -f` matches the waiting shell's own command line, so the loop never ends. Use `pgrep -x`, check the job's output file / result count, or `ps -eo args | grep -c "[p]attern"`.
+- Before telling the user a job is running or finished, check it (process list, output file, result count). Don't report from memory or from what a wait loop implies.
+- Don't report numbers as results until they are verified (for lag surveys: a screenshot of the measurement point shows real gameplay). Say plainly that they are unverified until then.
+- Don't use `pkill -f` with a pattern that also appears in your own command; it kills your own shell.
