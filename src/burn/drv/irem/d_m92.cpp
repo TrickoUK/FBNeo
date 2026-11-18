@@ -67,6 +67,10 @@ static INT32 nCyclesTotal[2] = { 0, 0 };
 static INT32 m92_kludge = 0;
 static INT32 m92_banks = 0;
 static INT32 nPrevScreenPos = 0;
+
+static INT32 bFrameResume;	// A hardware frame is in progress: the last frame ended at vblank
+static INT32 nVBlankSlice;	// Interleave slice of that frame that contains vblank
+static INT32 bVBlankHit;	// scanline_interrupts() just handled the vblank line
 static INT32 nScreenOffsets[2] = { 0, 0 }; // x,y (ppan)
 
 static UINT16 m92_video_reg = 0;
@@ -1618,6 +1622,8 @@ static INT32 DrvDoReset()
 
 	m92_sprite_buffer_busy = 0x80;
 	m92_sprite_buffer_timer = 0;
+	bFrameResume = 0;
+	bVBlankHit = 0;
 	PalBank	= 0;
 	m92_video_reg = 0;
 
@@ -2159,9 +2165,29 @@ static void scanline_interrupts(INT32 scanline)
 		}
 
 		pic8259_set_irq_line(0, 1);
+		bVBlankHit = 1;
 	} else {
 		pic8259_set_irq_line(0, 0);
 	}
+}
+
+// One interleave slice, in two halves so that a frame can end between them
+static void RunMainSlice(INT32 i, INT32 multiplier)
+{
+	VezOpen(0);
+	INT32 segment = nCyclesTotal[0] / nInterleave;
+
+	nCyclesDone[0] += VezRun(segment);
+	if ((i%multiplier)==(multiplier-1))
+		scanline_interrupts(i/multiplier); // update at hblank?
+	VezClose();
+}
+
+static void RunSoundSlice(INT32 i)
+{
+	VezOpen(1);
+	CPU_RUN_TIMER(1);
+	VezClose();
 }
 
 static INT32 DrvFrame()
@@ -2169,10 +2195,6 @@ static INT32 DrvFrame()
 	if (DrvReset) {
 		DrvDoReset();
 	}
-
-	nPrevScreenPos = 0;
-
-	VezNewFrame();
 
 	compile_inputs();
 
@@ -2182,31 +2204,54 @@ static INT32 DrvFrame()
 	// overclocking...
 	nCyclesTotal[0] = (INT32)((INT64)(9000000 / 60) * nBurnCPUSpeedAdjust / 0x0100);
 	nCyclesTotal[1] = (INT32)((INT64)(7159090 / 60) * nBurnCPUSpeedAdjust / 0x0100);
+
+	// A frame (one retro_run) ends at the start of vblank (line 248), where the screen is drawn and the vblank
+	// interrupt raised. The next frame starts there, so the interrupt is taken right after that frame's controls
+	// have been polled; the rest of the hardware frame is run first, up to the sound update.
+	// The sound is produced once per hardware frame, so each frame returns the sound of the hardware frame before it.
+	if (bFrameResume) {
+		// Finish the hardware frame: the sound CPU half of the vblank slice, then the slices after it
+		RunSoundSlice(nVBlankSlice);
+
+		for (INT32 i = nVBlankSlice + 1; i < nInterleave; i++)
+		{
+			RunMainSlice(i, multiplier);
+			RunSoundSlice(i);
+		}
+
+		VezOpen(1);
+
+		if (pBurnSoundOut) {
+			BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
+			iremga20_update(0, pBurnSoundOut, nBurnSoundLen);
+		}
+
+		VezClose();
+	} else {
+		// The sound of the first frame is that of the hardware frame that ends in the next one
+		if (pBurnSoundOut) memset(pBurnSoundOut, 0, nBurnSoundLen * 2 * sizeof(INT16));
+	}
+
+	// Start the next hardware frame
+	nPrevScreenPos = 0;
+	VezNewFrame();
 	nCyclesDone[0] = nCyclesDone[1] = 0;
+	bFrameResume = 1;
+	bVBlankHit = 0;
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		VezOpen(0);
-		INT32 segment = nCyclesTotal[0] / nInterleave;
+		RunMainSlice(i, multiplier);
 
-		nCyclesDone[0] += VezRun(segment);
-		if ((i%multiplier)==(multiplier-1))
-			scanline_interrupts(i/multiplier); // update at hblank?
-		VezClose();
+		if (bVBlankHit) {
+			// The frame ends here: the sound CPU half of this slice is run in the next frame
+			bVBlankHit = 0;
+			nVBlankSlice = i;
+			break;
+		}
 
-		VezOpen(1);
-		CPU_RUN_TIMER(1);
-		VezClose();
+		RunSoundSlice(i);
 	}
-
-	VezOpen(1);
-
-	if (pBurnSoundOut) {
-		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
-		iremga20_update(0, pBurnSoundOut, nBurnSoundLen);
-	}
-
-	VezClose();
 
 	return 0;
 }
@@ -2291,6 +2336,9 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(m92_sprite_list);
 		SCAN_VAR(m92_sprite_buffer_busy);
 		SCAN_VAR(m92_sprite_buffer_timer);
+		SCAN_VAR(nCyclesDone);
+		SCAN_VAR(bFrameResume);
+		SCAN_VAR(nVBlankSlice);
 		SCAN_VAR(m92_main_bank);
 
 		if (nAction & ACB_WRITE) {
