@@ -163,6 +163,8 @@ UINT32 System16Z80ClockSpeed = 0;
 static INT32 System18Startup = 0;
 
 static INT32 nExtraCycles[4];
+static INT32 bFrameResume;	// System 16A: a hardware frame is in progress, the last frame ended at vblank
+static INT32 nVBlankSlice;	// System 16A: interleave slice of that frame that contains vblank
 
 INT32 System16YM2413IRQInterval;
 
@@ -439,6 +441,7 @@ static INT32 System16DoReset()
 	System18Startup = 10;
 
 	nExtraCycles[0] = nExtraCycles[1] = nExtraCycles[2] = nExtraCycles[3] = 0;
+	bFrameResume = 0;
 
 	if (System16ResetCallbackDo) {
 		System16ResetCallbackDo();
@@ -2944,77 +2947,70 @@ void sys16_sync_mcu()
 	}
 }
 
-INT32 System16AFrame()
+static void System16AOpen()
 {
-	INT32 nInterleave = 262; // alien syndrome needs high interleave for the DAC sounds to be processed
-	
-	if (System16Reset) System16DoReset();
-
-	System16MakeInputs();
-	
-	nCyclesTotal[0] = (INT32)((INT64)10000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
-	nCyclesTotal[1] = 4000000 / 60;
-	nCyclesTotal[2] = (6000000 / 15) / 60;
-	nCyclesTotal[3] = (8000000 / 12) / 60;
-	nSystem16CyclesDone[0] = nExtraCycles[0];
-	nSystem16CyclesDone[1] = nExtraCycles[1];
-	nSystem16CyclesDone[2] = nExtraCycles[2];
-	nSystem16CyclesDone[3] = nExtraCycles[3];
-
-	SekNewFrame();
-	ZetNewFrame();
-	I8039NewFrame(); // dac?
-	mcs51NewFrame(); // prot mcu
-
 	SekOpen(0);
 
 	if (System167751ProgSize) {
 		N7751Open(0);
 	}
+}
 
-	for (INT32 i = 0; i < nInterleave; i++) {
-		// Run 68000
-		if (System1668KEnable) {
-			CPU_RUN(0, Sek);
-		} else {
-			CPU_IDLE(0, Sek);
-		}
-
-		// Run Z80
-		ZetOpen(0);
-		CPU_RUN_TIMER(1);
-		ZetClose();
-
-		if (System167751ProgSize) {
-			CPU_RUN(2, N7751);
-		}
-
-		if (System16I8751RomNum) {
-			CPU_RUN(3, mcs51);
-
-			if (i == 224) { // irq must be open duration of vblank (testcase: quartet, missing trapdoor @ beginning of level 15)
-				mcs51_set_irq_line(MCS51_INT0_LINE, CPU_IRQSTATUS_ACK);
-			}
-
-			if (i == nInterleave - 1) {
-				mcs51_set_irq_line(MCS51_INT0_LINE, CPU_IRQSTATUS_NONE);
-			}
-		}
-
-		if (i == 224) { // draw at vblank
-			if (System1668KEnable && !System16I8751RomNum) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
-			if (Simulate8751) Simulate8751();
-
-			if (pBurnDraw && s16a_update_after_vblank == 0) System16ARender();
-		}
-	}
-
+static void System16AClose()
+{
 	if (System167751ProgSize) {
 		N7751Close();
 	}
 
 	SekClose();
+}
 
+// One interleave slice of a System 16A frame. Returns 1 if the vblank draw was done in it.
+static INT32 System16ASlice(INT32 i, INT32 nInterleave)
+{
+	// Run 68000
+	if (System1668KEnable) {
+		CPU_RUN(0, Sek);
+	} else {
+		CPU_IDLE(0, Sek);
+	}
+
+	// Run Z80
+	ZetOpen(0);
+	CPU_RUN_TIMER(1);
+	ZetClose();
+
+	if (System167751ProgSize) {
+		CPU_RUN(2, N7751);
+	}
+
+	if (System16I8751RomNum) {
+		CPU_RUN(3, mcs51);
+
+		if (i == 224) { // irq must be open duration of vblank (testcase: quartet, missing trapdoor @ beginning of level 15)
+			mcs51_set_irq_line(MCS51_INT0_LINE, CPU_IRQSTATUS_ACK);
+		}
+
+		if (i == nInterleave - 1) {
+			mcs51_set_irq_line(MCS51_INT0_LINE, CPU_IRQSTATUS_NONE);
+		}
+	}
+
+	if (i == 224) { // draw at vblank
+		if (System1668KEnable && !System16I8751RomNum) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+		if (Simulate8751) Simulate8751();
+
+		if (pBurnDraw && s16a_update_after_vblank == 0) System16ARender();
+
+		return 1;
+	}
+
+	return 0;
+}
+
+// The end of a hardware frame: sound, the cycle overrun and the delayed video enable
+static void System16AEndFrame()
+{
 	if (pBurnSoundOut) {
 		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		if (System167751ProgSize) DACUpdate(pBurnSoundOut, nBurnSoundLen);
@@ -3028,6 +3024,70 @@ INT32 System16AFrame()
 	if (pBurnDraw && s16a_update_after_vblank == 1) System16ARender();
 
 	System16AVideoEnableDelayed = System16VideoEnable;
+}
+
+INT32 System16AFrame()
+{
+	INT32 nInterleave = 262; // alien syndrome needs high interleave for the DAC sounds to be processed
+
+	if (System16Reset) System16DoReset();
+
+	System16MakeInputs();
+
+	nCyclesTotal[0] = (INT32)((INT64)10000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
+	nCyclesTotal[1] = 4000000 / 60;
+	nCyclesTotal[2] = (6000000 / 15) / 60;
+	nCyclesTotal[3] = (8000000 / 12) / 60;
+
+	// When the screen is drawn at vblank, a frame (one retro_run) ends there, where the vblank interrupt is raised.
+	// The next frame starts there, so the interrupt is taken right after that frame's controls have been polled; the
+	// rest of the hardware frame is run first, up to the sound update.
+	// The sound is produced once per hardware frame, so each frame returns the sound of the hardware frame before it.
+	INT32 bSplit = (s16a_update_after_vblank == 0);
+
+	if (bSplit) {
+		if (bFrameResume) {
+			// Finish the hardware frame: the slices after vblank
+			System16AOpen();
+			for (INT32 i = nVBlankSlice + 1; i < nInterleave; i++) {
+				System16ASlice(i, nInterleave);
+			}
+			System16AClose();
+
+			System16AEndFrame();
+		} else {
+			// The sound of the first frame is that of the hardware frame that ends in the next one
+			if (pBurnSoundOut) memset(pBurnSoundOut, 0, nBurnSoundLen * 2 * sizeof(INT16));
+		}
+	}
+
+	// Start the next hardware frame
+	nSystem16CyclesDone[0] = nExtraCycles[0];
+	nSystem16CyclesDone[1] = nExtraCycles[1];
+	nSystem16CyclesDone[2] = nExtraCycles[2];
+	nSystem16CyclesDone[3] = nExtraCycles[3];
+
+	SekNewFrame();
+	ZetNewFrame();
+	I8039NewFrame(); // dac?
+	mcs51NewFrame(); // prot mcu
+
+	System16AOpen();
+
+	for (INT32 i = 0; i < nInterleave; i++) {
+		if (System16ASlice(i, nInterleave) && bSplit) {
+			// The frame ends here: the slices after vblank are run in the next frame
+			nVBlankSlice = i;
+			bFrameResume = 1;
+			System16AClose();
+
+			return 0;
+		}
+	}
+
+	System16AClose();
+
+	System16AEndFrame();
 
 	return 0;
 }
@@ -3785,6 +3845,10 @@ INT32 System16Scan(INT32 nAction,INT32 *pnMin)
 
 		if (System16HasGears) BurnShiftScan(nAction);
 
+		SCAN_VAR(nExtraCycles);
+		SCAN_VAR(nSystem16CyclesDone);
+		SCAN_VAR(bFrameResume);
+		SCAN_VAR(nVBlankSlice);
 		SCAN_VAR(System16SoundLatch);
 		SCAN_VAR(System16SoundMute);
 		SCAN_VAR(System16Input);
