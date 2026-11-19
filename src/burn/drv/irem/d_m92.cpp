@@ -2183,6 +2183,7 @@ static void RunMainSlice(INT32 i, INT32 multiplier)
 	VezClose();
 }
 
+// NOTE: CPU_RUN_TIMER uses a variable named i, so the parameter name matters.
 static void RunSoundSlice(INT32 i)
 {
 	VezOpen(1);

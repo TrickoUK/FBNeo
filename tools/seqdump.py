@@ -4,10 +4,10 @@
 Usage (inside mame-dev): python3 -I tools/seqdump.py CORE.so ROM.zip SAVEDIR OUT.txt FRAMES [boot script]
 The boot script uses the lag_measure.py syntax (run:/tap:); input is otherwise none. One line per run:
   run_no video_crc audio_frames audio_crc
-Set SEQ_PCM=file to also dump the raw audio. Uses lag_host.py from my-docs/tools (see my-docs/game-frame-timings.md).
+Set SEQ_PCM=file to also dump the raw audio. Uses lag_host.py from my-docs/tools. Give each run its own SAVEDIR (EEPROM/NVRAM persists in it).
 """
 import os, sys, zlib, ctypes as C
-sys.path.insert(0, "/var/home/bazzite/Projects/libretro/mame/my-docs/tools")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "my-docs", "tools"))
 import lag_host
 from lag_host import Host, ABATCH
 

@@ -32,7 +32,8 @@ distrobox enter mame-dev -- timeout 60 retroarch -v \
   /var/home/bazzite/Projects/mame-roms/fbneo/1942.zip
 ```
 
-- Afterwards `pgrep -a retroarch` and `pkill -9 -x retroarch` any leftovers.
+- Exit RetroArch gracefully by default (the core only saves NVRAM/EEPROM on a clean unload, so a force kill loses it): send UDP `QUIT` to `127.0.0.1:55355` (needs `network_cmd_enable = "true"`, see the append config below), or ask the user to quit from the menu. Only if that fails, `pkill -x retroarch` (SIGTERM), and `pkill -9 -x retroarch` as the last resort.
+- Afterwards `pgrep -a retroarch` and kill any leftovers as above.
 - Config: `~/.config/retroarch/retroarch.cfg`; core options in `~/.config/retroarch/config/FinalBurn Neo/FinalBurn Neo.opt` (edit only between runs, RetroArch rewrites it); system dir `~/.config/retroarch/system/`; states in `~/.config/retroarch/states/`.
 - FBNeo specifics: needs `~/.config/retroarch/system/fbneo/` for samples/hiscores/NeoGeo-style BIOS if a game wants them (check the `-v` log for missing-file messages).
 - Not truly headless: needs the user's Wayland session. A hidden/minimised window can stall on vsync; set `video_vsync = "false"` in the append config.
@@ -59,6 +60,10 @@ Test saves (`.state`, nvram) are disposable; delete stale ones if they block a b
 
 - Match surrounding code style; FBNeo drivers live in `src/burn/drv/`, libretro glue in `src/burner/libretro/` (`libretro.cpp`, `retro_input.cpp`, `retro_memory.cpp`).
 - Comments: capitalise TODO/FIXME/NOTE; describe what the code does, not what changed.
+- Line endings are mixed (about a quarter of `src/` uses CRLF, e.g. `d_suprnova.cpp`) and nothing normalises them (no
+  `.gitattributes`, no `core.autocrlf`). Keep each file's existing endings: before editing, check with `file <path>`; after
+  editing, `git diff --stat` must show only the lines you changed. If a whole file shows as changed, restore CRLF with
+  `sed -i 's/$/\r/' <path>` (only on a file that was all CRLF before).
 - Git: do NOT add Co-Authored-By or other Claude trailers to commits. Do not commit or push unless asked.
 - Don't pick laserdisc, music/rhythm or similar exotic titles as test games.
 - Host CPU governor is powersave, so performance numbers are noisy; don't blame it for slow frames without evidence.

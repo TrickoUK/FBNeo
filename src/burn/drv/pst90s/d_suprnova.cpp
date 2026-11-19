@@ -1761,7 +1761,8 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		ba.szName	= "RAM Tiles";
 		BurnAcb(&ba);
 
-		// NOTE: sprites are drawn one frame ahead of being mixed in, so this bitmap carries state across frames.
+		// NOTE: sprites are drawn in the same frame as they are mixed in, so this bitmap carries no state across frames; kept for
+		// save-state compatibility and in case the one-frame sprite lag is restored.
 		ba.Data		= (UINT8*)DrvTmpScreenC;
 		ba.nLen		= 320 * 240 * sizeof(INT16);
 		ba.nAddress = 0;
